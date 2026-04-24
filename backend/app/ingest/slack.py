@@ -10,7 +10,7 @@ def load_slack(conn: sqlite3.Connection) -> int:
         msgs = json.load(f)
     count = 0
     for m in msgs:
-        pid = m.get("person_id")
+        pid = m.get("user_id") or m.get("person_id")
         if not pid:
             continue
         conn.execute(

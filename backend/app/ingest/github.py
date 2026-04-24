@@ -3,11 +3,11 @@ import sqlite3
 logger = logging.getLogger(__name__)
 
 EMAIL_TO_ID = {
-    "ivan.petrov@team.dev": "ivan",
-    "maria.ivanova@team.dev": "maria",
-    "tom.nielsen@team.dev": "tom",
-    "anna.kowalska@team.dev": "anna",
-    "peter.dimitrov@team.dev": "peter",
+    "ivan.petrov@veins.dev": "ivan",
+    "maria.ivanova@veins.dev": "maria",
+    "tom.nielsen@veins.dev": "tom",
+    "anna.kowalska@veins.dev": "anna",
+    "peter.dimitrov@veins.dev": "peter",
 }
 
 PEOPLE_DATA = [

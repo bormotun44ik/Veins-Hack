@@ -11,9 +11,18 @@ export interface GraphNode {
   name: string
   role?: string
   avatar_url?: string
-  overload_score: number
-  status: NodeStatus
+  // Только Person имеет overload_score/status/baseline_sentiment.
+  // Task/Repo/Meeting приходят без этих полей на workload layer.
+  overload_score?: number
+  status?: NodeStatus
   baseline_sentiment?: number
+  // Workload layer — Task-поля:
+  title?: string
+  priority?: string
+  deadline?: string | null
+  // Meeting-поля:
+  datetime?: string
+  duration_minutes?: number
 }
 
 export interface GraphLink {

@@ -5,18 +5,21 @@ import type { GraphResponse, GraphNode } from '../types'
 interface Props {
   data: GraphResponse
   selectedId: string | null
-  onNodeClick: (id: string) => void
+  onNodeClick: (node: GraphNode) => void
 }
 
 function nodeColor(node: GraphNode, selectedId: string | null): string {
   if (node.id === selectedId) return '#ffffff'
+  // Non-Person nodes (Task/Repo/Meeting) — нейтральный серый
+  if (node.type !== 'Person') return '#55556a'
   if (node.status === 'red') return '#ef4444'
   if (node.status === 'yellow') return '#f59e0b'
   return '#10b981'
 }
 
 function nodeVal(node: GraphNode, selectedId: string | null): number {
-  const base = node.overload_score * 10 + 4
+  const score = node.overload_score ?? 0
+  const base = score * 10 + 4
   return node.id === selectedId ? base * 1.6 : base
 }
 
@@ -55,7 +58,7 @@ export default function GraphView({ data, selectedId, onNodeClick }: Props) {
             const l = link as { weight?: number }
             return (l.weight ?? 1) * 0.5 + 0.5
           }}
-          onNodeClick={(node) => onNodeClick((node as GraphNode).id)}
+          onNodeClick={(node) => onNodeClick(node as GraphNode)}
         />
       )}
     </div>

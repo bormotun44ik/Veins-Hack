@@ -33,7 +33,11 @@ export default function App() {
           <GraphView
             data={graphData}
             selectedId={selectedId}
-            onNodeClick={setSelectedId}
+            onNodeClick={(node) => {
+              // InsightPanel умеет только Person. Task/Repo/Meeting просто выделяем визуально.
+              if (node.type === 'Person') setSelectedId(node.id)
+              else setSelectedId(null)
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}>
