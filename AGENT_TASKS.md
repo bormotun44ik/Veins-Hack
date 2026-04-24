@@ -873,41 +873,74 @@ DoD:
 ТВОЯ РОЛЬ: Agent G — Security Sweep (read-only)
 ═══════════════════════════════════════════
 
-ЗАПУСК: только когда Agent A-F отчитались DONE.
-Режим: read-only. Ничего не правит сам, только составляет отчёт.
+ЗАПУСК: только когда Agent A-F отчитались DONE и их ветки смержены в main.
+Режим: read-only. НИЧЕГО не правишь сам. Только SECURITY_REPORT.md.
 
-ЗОНА ЧТЕНИЯ: весь репозиторий.
-ЗОНА ЗАПИСИ: только SECURITY_REPORT.md в корне репо.
+ЗОНА ЧТЕНИЯ: финальный main ветки (не worktree агентов):
+  git clone https://github.com/bormotun44ik/Veins-Hack.git /tmp/veins-security-check
+  cd /tmp/veins-security-check  ← работаешь здесь
 
-ЧТО ИЩЕШЬ:
-  • SQL injection (f-string в sqlite3.execute вместо parameterized queries)
-  • Command injection (subprocess shell=True с user input)
-  • Secrets leakage (хардкод токенов, .env в коммитах)
-  • CORS allow "*" в production-like endpoints
-  • Unvalidated user input в FastAPI (Path params без типов)
-  • eval/exec/pickle.loads
-  • Open redirects, SSRF
-  • Missing rate limiting на /insights (дорогой endpoint)
+ЗОНА ЗАПИСИ: только SECURITY_REPORT.md в корне.
+
+ЧТО ПРОВЕРЯЕШЬ (по приоритету):
+
+🔴 CRITICAL (блокирует сабмит):
+  1. Secrets в git history:
+     git log --all -p | grep -E "(gsk_|ghp_|sk-ant|ANTHROPIC_API)" | grep "^\+" 
+     → если нашёл реальный ключ в коммите — это CRITICAL
+  2. SQL injection: f-string в sqlite3.execute:
+     grep -rn 'execute(f"' backend/
+     grep -rn "execute(f'" backend/
+  3. Command injection: subprocess с shell=True и user input
+  4. eval/exec/pickle.loads с внешними данными
+
+🟡 MEDIUM (фиксить если есть время):
+  5. CORS allow "*" вместо конкретного origin
+  6. FastAPI Path params без типа: /{id} без : str/int аннотации
+  7. Хардкод секретов в коде (не .env.example — там placeholder'ы ОК)
+  8. Missing rate limiting на /insights endpoint
+
+🟢 LOW (в отчёт, не фиксить на хакатоне):
+  9. Open redirects, SSRF возможности
+  10. Missing input validation на длину строк
+  11. Логирование чувствительных данных
+
+ПРИОРИТЕТЫ ДЛЯ ORCHESTRATOR'А:
+  🔴 Critical → немедленно сообщить orchestrator'у, не коммитить до фикса
+  🟡 Medium  → внести в SECURITY_REPORT.md, orchestrator решает фиксить или нет
+  🟢 Low     → только в отчёт, НЕ паниковать, НЕ блокировать сабмит
 
 ФОРМАТ ОТЧЁТА (SECURITY_REPORT.md):
 
-  ## Findings
+  # Security Report — Veins Hack
+  Generated: <datetime>
+  Commit: <git rev-parse HEAD>
 
-  ### 🔴 Critical
-  - [file:line] описание → fix suggestion
+  ## Summary
+  🔴 Critical: N | 🟡 Medium: N | 🟢 Low: N
 
-  ### 🟡 Medium
-  ...
+  ## 🔴 Critical (MUST FIX before submit)
+  - [backend/app/db.py:42] SQL injection: f-string in execute() → use parameterized query
+    ```python
+    # BAD:  conn.execute(f"SELECT * FROM people WHERE id='{person_id}'")
+    # GOOD: conn.execute("SELECT * FROM people WHERE id=?", (person_id,))
+    ```
 
-  ### 🟢 Low (nice-to-fix)
-  ...
+  ## 🟡 Medium
+  - ...
 
-  ## Clean
-  Все остальные проверенные паттерны.
+  ## 🟢 Low
+  - ...
+
+  ## ✅ Clean checks
+  - git history: no secrets found
+  - CORS: properly scoped to localhost:5173
+  - ...
 
 DoD:
   1. SECURITY_REPORT.md создан и запушен в agent/g-security
-  2. Orchestrator знает что критичного нет или список явных fix'ов
+  2. Summary строка показывает количество по уровням
+  3. Если Critical = 0 → orchestrator спокойно идёт на сабмит
 ```
 
 ---
