@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    container_name: veins-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data:ro
+      - veins-db:/app/db
+    environment:
+      - DATABASE_PATH=/app/db/veins.db
+      - DATA_DIR=/app/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: veins-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  veins-db:

@@ -1,0 +1,37 @@
+# Secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# SQLite
+*.db
+*.db-journal
+*.sqlite
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Build artefacts
+backend/build/
+frontend/build/
+
+# Agent scratch (worktrees живут рядом с репо, а не внутри)
