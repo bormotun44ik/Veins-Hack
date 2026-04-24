@@ -210,8 +210,15 @@ worktree: /home/bormotun/Code/veins-agent-b
 
 3. tone_delta.py
    Использует from app.llm.client import ask (см. LLM contract).
+   ⚠️ Импорт через try/except — Agent D пишется параллельно:
+     try:
+         from app.llm.client import ask
+         LLM_AVAILABLE = True
+     except ImportError:
+         LLM_AVAILABLE = False
+   Если LLM_AVAILABLE == False → return 0.0 без ошибки.
    Пакетно: берёт последние 20 commit messages → Sonnet → {"sentiment": -1..+1}.
-   Берёт первые 20 (baseline) → то же.
+   Берёт первые 20 (baseline, 3 мес назад) → то же.
    Возвращает sigmoid(baseline - current) → [0, 1].
    Cache-key: "commit_tone:{person_id}:{hash}".
 
@@ -221,7 +228,14 @@ worktree: /home/bormotun/Code/veins-agent-b
 
 5. bus_factor.py
    % файлов в репо где person — единственный committer за 14 дней.
-   max по всем репам в которые он коммитил. Нормировано: ratio напрямую (уже [0,1]).
+   Алгоритм:
+     1. Для каждого файла из payload.files_touched по всем коммитам за 14 дней —
+        собрать множество уникальных committers.
+     2. Файл считается "owned" человеком если он единственный кто его трогал.
+     3. bus_factor = owned_files / total_files_touched_in_repo
+   Агрегация по всем репам: берём max(bus_factor) по репам где person коммитил.
+   Нормировано: ratio напрямую (уже [0,1]).
+   Если person не трогал ни одного файла → return 0.0.
 
 6. co_isolation.py
    1 - (unique co_authors за 14 дней / max_expected).
@@ -231,9 +245,15 @@ worktree: /home/bormotun/Code/veins-agent-b
    ratio коммитов на Sat/Sun (UTC). Нормировано: min(1, ratio * 2).
 
 8. composite.py
-   WEIGHTS из CONTRACTS §Composite weights.
-   def compute_overload(person_id, conn) -> float
-   def update_all_people(conn) -> None  # UPDATE people SET overload_score для всех
+   WEIGHTS из CONTRACTS §Composite weights (сумма = 1.0):
+     night_commits: 0.20, fix_revert: 0.15, tone_delta: 0.20,
+     pr_lag: 0.10, bus_factor: 0.10, co_isolation: 0.15, weekend: 0.10
+   def compute_overload(person_id, conn) -> float:
+     # Вызывает все 7 сигналов, считает weighted sum, clamp(result, 0.0, 1.0)
+     # Если сигнал бросил исключение → логируем, используем 0.0 (не падаем)
+   def update_all_people(conn) -> None:
+     # Итерируется по всем person_id из people таблицы
+     # UPDATE people SET overload_score=? WHERE id=?
 
 ОГРАНИЧЕНИЯ:
   • ТОЛЬКО чтение из conn, никаких UPDATE/INSERT кроме composite.update_all_people
