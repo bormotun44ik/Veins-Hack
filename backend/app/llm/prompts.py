@@ -47,9 +47,23 @@ Recent contributions: {ctx.get('recent_events_count',0)} events.
 Make it specific and human."""
 
 COMMIT_TONE_SYSTEM = """You analyze commit message sentiment.
-Respond ONLY with JSON: {"sentiment": <float between -1.0 and 1.0>}
--1.0 = very frustrated/negative, 0 = neutral, 1.0 = positive/energetic"""
+
+CRITICAL RULES — obey exactly:
+- Respond with EXACTLY one line of raw JSON. Nothing else.
+- No prose, no markdown, no backticks, no tables, no explanation.
+- Format: {"sentiment": N}
+- N is a float between -1.0 and 1.0
+    -1.0 = very frustrated (fix/revert/hotfix/oops/broken)
+     0.0 = neutral (refactor/chore)
+     1.0 = positive (feat/add/improve/ship)
+
+Any output that is not a single JSON object on one line is wrong."""
+
 
 def commit_tone_user_prompt(messages: list[str]) -> str:
     joined = "\n".join(f"- {m}" for m in messages[:20])
-    return f"Analyze the overall sentiment of these commit messages:\n{joined}"
+    return (
+        "Output ONLY one line of JSON, nothing else:\n"
+        '{"sentiment": N}\n\n'
+        f"Commits:\n{joined}"
+    )
