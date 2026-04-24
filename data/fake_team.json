@@ -1,0 +1,47 @@
+[
+  {
+    "id": "ivan",
+    "name": "Ivan Petrov",
+    "role": "Senior Backend Engineer",
+    "github_email": "ivan.petrov@veins.dev",
+    "avatar_url": "https://i.pravatar.cc/150?u=ivan",
+    "baseline_sentiment": 0.1,
+    "archetype": "firefighter"
+  },
+  {
+    "id": "maria",
+    "name": "Maria Ivanova",
+    "role": "Tech Lead",
+    "github_email": "maria.ivanova@veins.dev",
+    "avatar_url": "https://i.pravatar.cc/150?u=maria",
+    "baseline_sentiment": 0.6,
+    "archetype": "connector"
+  },
+  {
+    "id": "tom",
+    "name": "Tom Nielsen",
+    "role": "Backend Engineer",
+    "github_email": "tom.nielsen@veins.dev",
+    "avatar_url": "https://i.pravatar.cc/150?u=tom",
+    "baseline_sentiment": 0.3,
+    "archetype": "builder"
+  },
+  {
+    "id": "anna",
+    "name": "Anna Kowalska",
+    "role": "Frontend Engineer",
+    "github_email": "anna.kowalska@veins.dev",
+    "avatar_url": "https://i.pravatar.cc/150?u=anna",
+    "baseline_sentiment": 0.5,
+    "archetype": "maker"
+  },
+  {
+    "id": "peter",
+    "name": "Peter Dimitrov",
+    "role": "QA Engineer",
+    "github_email": "peter.dimitrov@veins.dev",
+    "avatar_url": "https://i.pravatar.cc/150?u=peter",
+    "baseline_sentiment": 0.4,
+    "archetype": "guardian"
+  }
+]
