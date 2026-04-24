@@ -306,17 +306,30 @@ worktree: /home/bormotun/Code/veins-agent-c
 2. backend/app/main.py
    - FastAPI app(title="Veins", version="0.1.0")
    - CORS: localhost:5173
-   - on_startup: init_db() + ingest_all() если USE_FAKE_GITHUB (первый запуск)
+   - on_startup последовательность:
+       1. init_db()
+       2. ingest_all(conn)  — всегда, не только при USE_FAKE_GITHUB
+       3. from app.signals.composite import update_all_people
+          update_all_people(conn)  — пересчитать overload_score после ingest
+       ⚠️ Шаг 3 через try/except ImportError (Agent B может ещё не быть готов)
    - Exception handler для VeinsError → JSON {"error": {"code": ..., "message": ...}}
-   - include_router(graph.api.router) и include_router(llm.api.router)  # llm.api пишет Agent D
+   - include_router(graph.api.router)
+   - try: include_router(llm.api.router) except ImportError: pass  # Agent D параллельно
    - GET /health → {"status": "ok", "version": "0.1.0"}
 
 3. backend/app/graph/builder.py
    - def build_graph(conn) -> networkx.MultiDiGraph
-   - Читает events + people + tasks + meetings + edges
-   - Создаёт ноды типов Person/Repo/Task/Meeting с properties из CONTRACTS §Graph
-   - Создаёт рёбра 5 типов (commits_to, co_authored, reviews_pr, assigned_to, attended)
-     из events (агрегация)
+   - Если people таблица пустая → return пустой MultiDiGraph() без ошибки
+   - Читает people + tasks + meetings → создаёт ноды
+   - Читает events → агрегирует рёбра 5 типов из CONTRACTS §Graph
+   - Ноды Person получают: id, name, role, avatar_url, overload_score, baseline_sentiment
+     status = "green"|"yellow"|"red" по overload_score (0-0.4/0.4-0.7/0.7-1.0)
+   - Рёбра агрегируются за последние 14 дней:
+     commits_to:  GROUP BY person_id, repo_id → {count, night_ratio}
+     co_authored: из payload.co_authors → {count_2weeks, last_date}
+     reviews_pr:  из events type='review' → {count, avg_lag_hours}
+     assigned_to: из tasks таблицы → {priority, overdue}
+     attended:    из events type='meeting_attended' → {talk_ratio, sentiment}
 
 4. backend/app/graph/layers.py
    - def stress_layer(G) -> MultiDiGraph   # только Person ноды, без рёбер
@@ -332,9 +345,15 @@ worktree: /home/bormotun/Code/veins-agent-c
    - Возвращает result из to_json с полем "layer"
 
    - GET /person/{person_id}
-   - Собирает полный person context (CONTRACTS §API /person/{id})
-   - signals читает из UPDATE people SET overload_score (обновляет Agent B)
-   - Если человека нет → raise PersonNotFound
+   - Если person не найден в people таблице → raise PersonNotFound
+   - Собирает полный person context (CONTRACTS §API /person/{id}):
+       • Читает people row (name, role, overload_score, etc.)
+       • signals: вызывает каждый compute() из app.signals.* по одному:
+           try: from app.signals import night_commits, fix_revert, ...
+           except ImportError: signals = {}  # Agent B ещё не готов
+       • mock_signals: читает из people.metadata_json если есть
+       • neighbors: 1-hop из graphа по person_id
+       • recent_events_count: COUNT(*) FROM events WHERE person_id=?
 
 ЗАВИСИМОСТЬ:
   • Работаешь против data/samples/sample_events.jsonl (не ждёшь Agent A/B).
