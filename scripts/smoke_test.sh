@@ -35,7 +35,8 @@ jqcheck() {
   local expr="$3"
   local expected="$4"
   local got
-  got=$(curl -sf "$url" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print($expr)" 2>/dev/null)
+  # Без -f, чтобы body на 4xx/5xx тоже распарсился (PERSON_NOT_FOUND, BAD_LAYER и т.п.)
+  got=$(curl -s "$url" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print($expr)" 2>/dev/null)
   if [ "$got" = "$expected" ]; then
     echo "  ✅ $name ($expr=$got)"
     pass=$((pass+1))
