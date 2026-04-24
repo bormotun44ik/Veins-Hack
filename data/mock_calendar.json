@@ -1,0 +1,182 @@
+[
+  {
+    "id": "M-2026-04-22-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-22T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-22T08:55:00Z"
+  },
+  {
+    "id": "M-2026-04-22-oncall",
+    "title": "On-call Incident Review",
+    "datetime": "2026-04-22T09:15:00Z",
+    "duration_minutes": 45,
+    "attendees": ["ivan", "maria"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-22T09:15:00Z"
+  },
+  {
+    "id": "M-2026-04-22-sprint",
+    "title": "Sprint Review",
+    "datetime": "2026-04-22T10:00:00Z",
+    "duration_minutes": 60,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-22T10:00:00Z"
+  },
+  {
+    "id": "M-2026-04-22-1on1-ivan",
+    "title": "1:1 Ivan / Maria",
+    "datetime": "2026-04-22T11:00:00Z",
+    "duration_minutes": 30,
+    "attendees": ["ivan", "maria"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-22T11:00:00Z"
+  },
+  {
+    "id": "M-2026-04-22-arch",
+    "title": "Architecture Discussion",
+    "datetime": "2026-04-22T14:00:00Z",
+    "duration_minutes": 60,
+    "attendees": ["ivan", "maria", "tom"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-22-ops",
+    "title": "Ops Sync",
+    "datetime": "2026-04-22T15:00:00Z",
+    "duration_minutes": 30,
+    "attendees": ["ivan", "maria"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-22T15:00:00Z"
+  },
+  {
+    "id": "M-2026-04-23-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-23T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-23-planning",
+    "title": "Sprint Planning",
+    "datetime": "2026-04-23T09:30:00Z",
+    "duration_minutes": 90,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-23T09:15:00Z"
+  },
+  {
+    "id": "M-2026-04-23-auth-review",
+    "title": "Auth Module Deep Dive",
+    "datetime": "2026-04-23T11:00:00Z",
+    "duration_minutes": 60,
+    "attendees": ["ivan", "tom"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-23T11:00:00Z"
+  },
+  {
+    "id": "M-2026-04-23-roadmap",
+    "title": "Q2 Roadmap Review",
+    "datetime": "2026-04-23T14:00:00Z",
+    "duration_minutes": 60,
+    "attendees": ["maria", "ivan"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-21-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-21T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-21-incident",
+    "title": "Production Incident Postmortem",
+    "datetime": "2026-04-21T09:15:00Z",
+    "duration_minutes": 60,
+    "attendees": ["ivan", "maria"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-21T09:15:00Z"
+  },
+  {
+    "id": "M-2026-04-21-frontend-sync",
+    "title": "Frontend / Backend Sync",
+    "datetime": "2026-04-21T15:00:00Z",
+    "duration_minutes": 30,
+    "attendees": ["anna", "tom", "maria"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-20-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-20T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-24-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-24T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-24-release",
+    "title": "Release Go/No-Go",
+    "datetime": "2026-04-24T09:15:00Z",
+    "duration_minutes": 30,
+    "attendees": ["ivan", "maria", "peter"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-24T09:15:00Z"
+  },
+  {
+    "id": "M-2026-04-24-1on1-ivan-urgent",
+    "title": "1:1 Ivan / Maria (urgent)",
+    "datetime": "2026-04-24T09:45:00Z",
+    "duration_minutes": 30,
+    "attendees": ["ivan", "maria"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-24T09:45:00Z"
+  },
+  {
+    "id": "M-2026-04-24-security",
+    "title": "Security Review — auth module",
+    "datetime": "2026-04-24T10:15:00Z",
+    "duration_minutes": 60,
+    "attendees": ["ivan", "maria", "tom"],
+    "back_to_back": true,
+    "prev_meeting_end": "2026-04-24T10:15:00Z"
+  },
+  {
+    "id": "M-2026-04-19-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-19T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  },
+  {
+    "id": "M-2026-04-18-standup",
+    "title": "Daily Standup",
+    "datetime": "2026-04-18T09:00:00Z",
+    "duration_minutes": 15,
+    "attendees": ["ivan", "maria", "tom", "anna", "peter"],
+    "back_to_back": false,
+    "prev_meeting_end": null
+  }
+]
