@@ -71,8 +71,11 @@ worktree: /home/bormotun/Code/veins-agent-a
 
 2. backend/app/config.py
    - pydantic-settings BaseSettings, читает .env
-   - Поля: database_path, data_dir, github_token, shadoclaw_api_key, shadoclaw_base_url,
-           use_fake_github (bool), log_level
+   - Поля: database_path, data_dir, github_token, github_repo,
+           shadoclaw_api_key, shadoclaw_base_url,
+           use_fake_github (bool), log_level,
+           groq_api_keys: list[str]  # читает GROQ_API_KEY_1..5, фильтрует пустые
+   - Groq ротация: groq_client() → возвращает groq.Groq(api_key=next_key) round-robin
    - Singleton: settings = Settings()
 
 3. backend/app/ingest/github.py
@@ -356,11 +359,14 @@ worktree: /home/bormotun/Code/veins-agent-d
        opus   → "claude-opus-4-7"
        sonnet → "claude-sonnet-4-6"
        haiku  → "claude-haiku-4-5-20251001"
-   - ShadoClaw: POST {SHADOCLAW_BASE_URL}/messages с Bearer auth.
-     Формат тела и ответа — Anthropic Messages API совместимый.
-     ⚠️ SPEC ShadoClaw ЕЩЁ НЕ ПОЛУЧЕН → реализуй ask() используя стандартный
-     anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=SHADOCLAW_BASE_URL).
-     Когда spec придёт, orchestrator поменяет ТОЛЬКО тело ask(), контракт останется.
+   - ShadoClaw OpenProxy (no-restricts dev build): локальный прокси на 127.0.0.1:8317
+     Полностью совместим с Anthropic Messages API — просто меняем base_url.
+     Реализация:
+       client = anthropic.AsyncAnthropic(
+           api_key="not-required",   # no-restricts версия
+           base_url=settings.shadoclaw_base_url  # http://127.0.0.1:8317/v1
+       )
+     Никаких кастомных заголовков не нужно. Работает как стандартный Anthropic SDK.
    - При cache_key:
        1. check llm_cache table
        2. если hit — return (set contextvar cached=True)
@@ -522,7 +528,7 @@ DoD:
 
 ---
 
-## 🅵 AGENT F — Fixtures + Seed
+## 🅵 AGENT F — Fixtures + Seed + Real GitHub
 
 ### Branch & worktree
 ```
@@ -536,98 +542,177 @@ worktree: /home/bormotun/Code/veins-agent-f
 [ОБЩАЯ ПРЕАМБУЛА]
 
 ═══════════════════════════════════════════
-ТВОЯ РОЛЬ: Agent F — Demo fixtures + Seed script
+ТВОЯ РОЛЬ: Agent F — Demo fixtures + Real GitHub history + Seed script
 ═══════════════════════════════════════════
 
 ЗОНА ОТВЕТСТВЕННОСТИ:
   data/ полностью
   scripts/seed_demo.py
+  scripts/generate_github_history.py   ← новый скрипт
+
+РЕПО ДЛЯ АНАЛИЗА (живые данные с GitHub):
+  https://github.com/bormotun44ik/veeins-test
+  GitHub token: из .env GITHUB_TOKEN
+  USE_FAKE_GITHUB=false (дефолт)
 
 ЧТО ДЕЛАЕШЬ:
 
-1. data/fake_team.json — 5 людей:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ЧАСТЬ 1: Реальная GitHub история
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+scripts/generate_github_history.py
+Скрипт генерирует 2 недели реалистичной git-истории в репо veeins-test.
+Принцип: коммиты с backdating через GIT_AUTHOR_DATE + GIT_COMMITTER_DATE env vars.
+
+5 git identities (разные user.email/name):
+  ivan.petrov@team.dev    — Ivan Petrov
+  maria.ivanova@team.dev  — Maria Ivanova
+  tom.nielsen@team.dev    — Tom Nielsen
+  anna.kowalska@team.dev  — Anna Kowalska
+  peter.dimitrov@team.dev — Peter Dimitrov
+
+Паттерны коммитов (14 дней, начиная с today-14d):
+  Иван:
+    - 60-70% коммитов в 22:00-04:00 UTC
+    - 50%+ сообщений содержат: fix, revert, hotfix, bug
+    - 0 co-authored коммитов за последние 2 недели
+    - ~15 коммитов total
+    - Примеры сообщений: "fix: null pointer in auth again",
+      "revert: broke login flow", "hotfix: token expiry",
+      "fix: race condition in cache", "bug: session not cleared"
+
+  Мария:
+    - 90% коммитов в 09:00-18:00 UTC
+    - Co-authored: 4+ коммита с tom.nielsen, 2 с anna.kowalska
+    - Позитивные сообщения: "feat:", "add:", "improve:", "refactor:"
+    - ~12 коммитов
+
+  Том:
+    - Дневные коммиты, mix feat/fix
+    - Co-authored с Марией
+    - ~10 коммитов
+
+  Анна:
+    - Дневные, в основном frontend файлы
+    - ~8 коммитов
+
+  Пётр:
+    - Мало коммитов, рабочее время
+    - ~4 коммита
+
+Пример команд (Python subprocess):
+  env = {
+    "GIT_AUTHOR_NAME": "Ivan Petrov",
+    "GIT_AUTHOR_EMAIL": "ivan.petrov@team.dev",
+    "GIT_AUTHOR_DATE": "2026-04-10T23:47:00",
+    "GIT_COMMITTER_NAME": "Ivan Petrov",
+    "GIT_COMMITTER_EMAIL": "ivan.petrov@team.dev",
+    "GIT_COMMITTER_DATE": "2026-04-10T23:47:00",
+    **os.environ
+  }
+  subprocess.run(["git", "commit", "-m", "fix: null pointer"], env=env, cwd=repo_path)
+
+Файлы для трогания (рандомные изменения): src/auth.py, src/api.py, src/utils.py,
+  src/models.py, tests/test_auth.py, tests/test_api.py, README.md
+
+PR'ы через GitHub API (PyGithub):
+  - 3 открытых PR от Ивана (без ревью или с лагом >24ч)
+  - 2 PR от Марии (быстро заревьюены Томом)
+  Review events тоже создать через API.
+
+После генерации — запушить в veeins-test через `git push`.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ЧАСТЬ 2: Mock данные (всё остальное)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. data/fake_team.json — 5 людей (используется только при USE_FAKE_GITHUB=true):
    [
      {"id": "ivan",  "name": "Ivan Petrov",    "role": "Senior Backend Engineer",
+      "github_email": "ivan.petrov@team.dev",
       "avatar_url": "https://i.pravatar.cc/150?u=ivan",
       "baseline_sentiment": 0.1,   "archetype": "burnout"},
      {"id": "maria", "name": "Maria Ivanova",  "role": "Tech Lead",
+      "github_email": "maria.ivanova@team.dev",
       "avatar_url": "https://i.pravatar.cc/150?u=maria",
       "baseline_sentiment": 0.6,   "archetype": "healthy-leader"},
      {"id": "tom",   "name": "Tom Nielsen",    "role": "Backend Engineer",
+      "github_email": "tom.nielsen@team.dev",
       "avatar_url": "https://i.pravatar.cc/150?u=tom",
       "baseline_sentiment": 0.3,   "archetype": "moderate-load"},
      {"id": "anna",  "name": "Anna Kowalska",  "role": "Frontend Engineer",
+      "github_email": "anna.kowalska@team.dev",
       "avatar_url": "https://i.pravatar.cc/150?u=anna",
       "baseline_sentiment": 0.5,   "archetype": "healthy"},
      {"id": "peter", "name": "Peter Dimitrov", "role": "QA Engineer",
+      "github_email": "peter.dimitrov@team.dev",
       "avatar_url": "https://i.pravatar.cc/150?u=peter",
       "baseline_sentiment": 0.4,   "archetype": "healthy"}
    ]
 
 2. data/samples/sample_events.jsonl
    50 строк, формат из CONTRACTS §Event schema.
-   Распределение:
-     • Иван: ~15 events — 70% ночных commits, 50% fix/revert, 0 co-authors, frustrated tone
-     • Мария: ~12 events — дневные commits, co-authors tom+anna, positive, быстрые reviews
-     • Том: ~10 events — средняя нагрузка, co-author с Марией, нейтральный
-     • Анна: ~8 events — дневные commits, редкие PR
-     • Пётр: ~5 events — в основном meetings, мало коммитов
-   ВАЖНО: sample должен давать реалистичный overload_score в диапазоне CONTRACTS:
+   Генерируй на основе тех же паттернов что в GitHub истории:
      ivan ≈ 0.82, maria ≈ 0.35, tom ≈ 0.55, anna ≈ 0.28, peter ≈ 0.22
 
-3. data/samples/sample_graph.json — уже описан в CONTRACTS §Sample fixtures, скопируй.
-
+3. data/samples/sample_graph.json — из CONTRACTS §Sample fixtures, скопируй.
 4. data/samples/sample_insight.json — из CONTRACTS.
-
 5. data/samples/sample_person.json — из CONTRACTS.
 
-6. data/mock_slack.json
-   ~60 сообщений, timestamps за 14 дней.
-   Паттерны:
-     • Иван: поздние сообщения (22:00+), фразы "не успею", "опять баг", замолкание 3+ дней
-     • Мария: активная днём, позитивные реакции
-     • Остальные: фон
+6. data/mock_slack.json (~60 сообщений, 14 дней):
+   Иван: поздние (22:00+), "не успею", "опять баг", тишина 3+ дней
+   Мария: активная днём, позитивные реакции
+   Остальные: фоновые
 
-7. data/mock_jira.json
-   ~15 задач:
-     • 3 критичных назначены Ивану, 2 overdue
-     • У Марии 4 задачи, все в progress
-     • У Тома 3, у Анны 3, у Петра 2
+7. data/mock_jira.json (~15 задач):
+   3 критичных → Иван (2 overdue), Мария 4 in-progress, Том 3, Анна 3, Пётр 2
 
-8. data/mock_calendar.json
-   ~20 митингов за 2 недели:
-     • Иван: 4 митинга в день (вт/чт), back-to-back
-     • Мария: 2-3 митинга/день, равномерно
-     • Остальные: 1-2/день
+8. data/mock_calendar.json (~20 митингов):
+   Иван: back-to-back (вт/чт), Мария: 2-3/день, остальные: 1-2/день
 
-9. data/transcript.json
-   1 транскрипт митинга 15 мин (fabricated).
-   Формат:
-   {
-     "meeting_id": "M-2026-04-22-standup",
-     "duration_sec": 900,
-     "segments": [
-       {"speaker": "maria", "text": "Let's start ...", "start": 0, "end": 8},
-       {"speaker": "tom",   "text": "I'm blocked on ...", "start": 9, "end": 25},
-       {"speaker": "ivan",  "text": "...", "start": 26, "end": 32}  -- очень короткие фразы
-     ]
-   }
-   Иван должен говорить <10% от total duration (talk_ratio низкий).
+9. data/meeting.mp3 — скачай любой короткий (2-3 мин) публичный WAV/MP3 с разговором
+   (например https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3 как заглушку)
+   ИЛИ синтезируй через Python gtts:
+     from gtts import gTTS
+     text = "Maria: Let's start standup. Tom: I'm blocked on auth module..."
+     gTTS(text).save("data/meeting.mp3")
 
-10. scripts/seed_demo.py
-    - python scripts/seed_demo.py --fresh
-    - Очищает БД, вызывает init_db(), потом ingest_all()
-    - В конце печатает "Seeded {N} events, {M} people"
+10. data/transcript.json — РЕАЛЬНАЯ транскрипция через Groq Whisper:
+    - Берёшь data/meeting.mp3
+    - Гонишь через Groq API (whisper-large-v3-turbo, free tier)
+    - Groq ключи с ротацией (см. GROQ_API_KEYS в .env)
+    - Формат output:
+    {
+      "meeting_id": "M-2026-04-22-standup",
+      "duration_sec": 900,
+      "raw_text": "...",
+      "segments": [
+        {"speaker": "maria", "text": "Let's start...", "start": 0, "end": 8},
+        {"speaker": "tom",   "text": "I'm blocked...", "start": 9, "end": 25},
+        {"speaker": "ivan",  "text": "ok", "start": 26, "end": 28}
+      ]
+    }
+    ⚠️ Groq Whisper не делает diarization (speaker separation) — присваивай speaker
+    по очереди (round-robin: maria→tom→ivan→maria...) если только 1 сегмент.
+    Committed в репо чтобы не гнать повторно на демо.
+
+11. scripts/seed_demo.py
+    python scripts/seed_demo.py --fresh
+    Очищает БД, init_db(), ingest_all()
+    Печатает: "Seeded {N} events, {M} people"
 
 ОГРАНИЧЕНИЯ:
-  • Не меняй sample_*.json после первого коммита — на эти файлы ориентируются все агенты.
-  • Если меняешь формат — пиши в CONTRACTS.md и жди апрув.
+  • Не меняй sample_*.json после первого коммита.
+  • generate_github_history.py — запускать ОДИН раз, репо veeins-test чистить перед запуском.
+  • Если меняешь формат данных — пиши в CONTRACTS.md и жди апрув.
 
 DoD:
-  1. cat data/samples/sample_events.jsonl | wc -l → 50
-  2. python scripts/seed_demo.py --fresh → "Seeded ~50 events, 5 people"
-  3. sqlite3 veins.db "SELECT COUNT(*) FROM people" → 5
-  4. jq . data/mock_slack.json → валидный JSON, ~60 записей
+  1. python scripts/generate_github_history.py → репо veeins-test содержит ~50 коммитов
+  2. cat data/samples/sample_events.jsonl | wc -l → 50
+  3. data/transcript.json существует, содержит segments
+  4. python scripts/seed_demo.py --fresh → "Seeded ~50 events, 5 people"
+  5. jq . data/mock_slack.json → валидный JSON, ~60 записей
 
 ОТЧЁТ.
 ```
