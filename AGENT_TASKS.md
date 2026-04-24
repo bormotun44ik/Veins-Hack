@@ -30,6 +30,32 @@ Worktree path: /home/bormotun/Code/veins-agent-<X>
 
 Коммиты: каждые 30-45 минут, сообщение "<agent-letter>: <short>".
 Push: только в свою ветку. Никогда не push в main.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+СТАНДАРТЫ КОДА (обязательно для всех агентов)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PYTHON (Agents A, B, C, D):
+  • Всегда type hints: def compute(person_id: str, conn: sqlite3.Connection) -> float
+  • Parameterized queries ОБЯЗАТЕЛЬНО: conn.execute("SELECT * WHERE id=?", (id,))
+    НЕ f-string в SQL — это SQL injection
+  • pydantic-settings для конфига — не os.environ напрямую
+  • async/await для I/O: FastAPI endpoints, httpx, anthropic SDK
+  • try/except на внешние вызовы (LLM, GitHub API, Groq) — возвращай fallback, не падай
+  • Логируй через logging.getLogger(__name__), не print()
+  • Conditional imports через try/except ImportError для межагентных зависимостей
+
+JAVASCRIPT/TYPESCRIPT (Agent E):
+  • Строгий TypeScript: noImplicitAny, strictNullChecks
+  • Типы из src/types.ts — не any, не as unknown
+  • useEffect cleanup: возвращать функцию отмены если есть async внутри
+  • Ошибки fetch обрабатывать: try/catch + показать пользователю (не молчать)
+  • Не мутировать state напрямую: всегда новый объект/массив
+
+SHELL/BASH (Agent F — generate_github_history.py):
+  • subprocess.run с check=True или явной обработкой returncode
+  • Передавать env через словарь, не shell=True
+  • Проверять существование файлов перед операциями
 ```
 
 ---
@@ -131,6 +157,13 @@ worktree: /home/bormotun/Code/veins-agent-a
 8. backend/app/ingest/__init__.py
    - async def ingest_all(conn) -> dict[str, int]  — вызывает все loaders по очереди,
      возвращает {source: count}
+
+PYTHON BEST PRACTICES (из roadmap):
+  • sqlite3: всегда conn.row_factory = sqlite3.Row для dict-like доступа
+  • INSERT OR IGNORE для idempotency — не проверяй вручную
+  • pydantic BaseSettings автоматически читает .env — не дублируй os.environ
+  • PyGithub: использовать paginated list, не загружать всё в память сразу
+  • Groq client: groq.Groq(api_key=...) — синхронный, не async (SDK не поддерживает async)
 
 ОГРАНИЧЕНИЯ:
   • Не трогай backend/app/signals/, graph/, llm/, rag/
@@ -653,6 +686,18 @@ worktree: /home/bormotun/Code/veins-agent-e
   • Скопируй data/samples/sample_graph.json и sample_insight.json в frontend/public/samples/
     в первом коммите
 
+TYPESCRIPT BEST PRACTICES (из roadmap):
+  • Типизируй всё через src/types.ts — копируй типы из CONTRACTS.md
+  • Event handlers: (e: React.MouseEvent<HTMLButtonElement>) не просто (e: any)
+  • fetch с AbortController для отмены при смене selectedId:
+      useEffect(() => {
+        const ctrl = new AbortController()
+        fetchInsights(id, ctrl.signal).then(...)
+        return () => ctrl.abort()
+      }, [selectedId])
+  • Tailwind: используй CSS переменные из DESIGN.md через className,
+    не inline style для цветов (кроме динамических width/transform)
+
 ОГРАНИЧЕНИЯ:
   • НЕ делай роутинг (react-router). Один экран — один URL.
   • НЕ добавляй state-management библиотеки (redux/zustand). useState + useEffect достаточно.
@@ -844,6 +889,13 @@ PR'ы через GitHub API (PyGithub):
     python scripts/seed_demo.py --fresh
     Очищает БД, init_db(), ingest_all()
     Печатает: "Seeded {N} events, {M} people"
+
+BASH/SUBPROCESS BEST PRACTICES (из roadmap):
+  • subprocess.run(cmd, check=True, capture_output=True, text=True) — не shell=True
+  • env передавать явно: {**os.environ, "GIT_AUTHOR_DATE": date} — не через shell string
+  • Проверять git exit code: если не 0 — логировать и продолжать (не падать весь скрипт)
+  • gtts для синтеза речи — синхронный, не требует API ключа
+  • Groq audio transcription: открывать файл в binary mode ("rb"), не text
 
 ОГРАНИЧЕНИЯ:
   • Не меняй sample_*.json после первого коммита.
