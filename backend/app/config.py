@@ -1,13 +1,18 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
-import os
+
+# Repo root = 2 levels up from backend/app/config.py
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = REPO_ROOT / ".env"
+
 
 class Settings(BaseSettings):
-    database_path: str = "/app/db/veins.db"
-    data_dir: str = "/app/data"
+    database_path: str = str(REPO_ROOT / "db" / "veins.db")
+    data_dir: str = str(REPO_ROOT / "data")
     github_token: str = ""
     github_repo: str = "bormotun44ik/veeins-test"
-    shadoclaw_base_url: str = "http://host.docker.internal:8317/v1"
+    shadoclaw_base_url: str = "http://127.0.0.1:8317/v1"
     shadoclaw_api_key: str = "sk-dummy"
     use_fake_github: bool = False
     log_level: str = "INFO"
@@ -33,7 +38,7 @@ class Settings(BaseSettings):
         return Groq(api_key=next(self._groq_cycle))
 
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE)
         env_file_encoding = "utf-8"
         extra = "ignore"
 
