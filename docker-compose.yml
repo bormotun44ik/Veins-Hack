@@ -8,6 +8,9 @@ services:
       # По умолчанию слушает 127.0.0.1 — внутри контейнера это не доступно снаружи.
       # Слушаем 0.0.0.0, чтобы порт-forward 8317:8317 работал.
       - OPENPROXY_HOST=0.0.0.0
+      # ОБЯЗАТЕЛЬНО: без этого Anthropic блокирует запрос (system prompt не соответствует
+      # Claude Code CLI). См. vendor/shadoclaw/PROXY-README.md §3.
+      - OPENPROXY_STRIP_SYSTEM=1
     # OAuth-аккаунты и токены хоста (заранее сделать: openproxy account import main)
     volumes:
       - ${HOME}/.config/openproxy:/root/.config/openproxy

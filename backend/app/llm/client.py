@@ -36,13 +36,15 @@ async def ask(
 
     client = _get_client()
     try:
-        response = await client.messages.create(
-            model=MODEL_MAP[model],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        # temperature deprecated для новых Claude 4.x моделей (opus/sonnet/haiku 4.x);
+        # передаём только в старые/legacy где её принимают.
+        create_kwargs: dict = {
+            "model": MODEL_MAP[model],
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+        response = await client.messages.create(**create_kwargs)
         result = response.content[0].text
         if prompt_hash:
             from app.llm.cache import set_cached
