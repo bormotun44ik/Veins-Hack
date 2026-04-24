@@ -15,21 +15,56 @@
 Worktree path: /home/bormotun/Code/veins-agent-<X>
 Твоя ветка: agent/<X>-<name>
 
-ПЕРЕД ЛЮБЫМ КОДОМ прочитай целиком:
-  1. /home/bormotun/Code/Veins-Hack/ARCHITECTURE.md — структура, твоя зона
-  2. /home/bormotun/Code/Veins-Hack/CONTRACTS.md    — схемы, API, sample fixtures
-  3. /home/bormotun/Code/Veins-Hack/KARPATHY.md     — как ты должен работать
-  4. /home/bormotun/Code/Veins-Hack/PLAN.md         — общий контекст (readonly)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRE-FLIGHT (делай В ЭТОМ ПОРЯДКЕ, до любого кода)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Применяй KARPATHY.md ко всему что делаешь:
+1. cd /home/bormotun/Code/Veins-Hack && git pull origin main
+2. git worktree add ../veins-agent-<X> -b agent/<X>-<name>
+3. cd ../veins-agent-<X>
+4. cp ../Veins-Hack/.env ./.env  (если файла нет — говори orchestrator'у)
+5. Прочитай целиком:
+     ARCHITECTURE.md   — структура, твоя зона ответственности
+     CONTRACTS.md      — схемы БД, API, sample fixtures
+     KARPATHY.md       — как работать (ОБЯЗАТЕЛЬНО)
+     PLAN.md           — общий контекст (readonly)
+6. Если твоя папка затрагивает frontend → прочитай DESIGN.md
+
+Применяй KARPATHY.md:
   • не молчи в блокере >15 мин
   • пиши МИНИМУМ кода
   • не выходи из своей зоны
   • не меняй CONTRACTS.md
   • отчитайся по шаблону DONE/BLOCKED/CHANGED/NEXT
 
-Коммиты: каждые 30-45 минут, сообщение "<agent-letter>: <short>".
-Push: только в свою ветку. Никогда не push в main.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ФАКТЫ ОБ ИНФРАСТРУКТУРЕ (актуально на старт)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• ShadoClaw: `no-restricts` билд, слушает 127.0.0.1:8317 (или host.docker.internal:8317 из docker).
+  Endpoint Anthropic-compatible: POST /v1/messages.
+  Auth НЕ ПРОВЕРЯЕТСЯ — любой ключ, включая пустой/"sk-dummy", работает.
+  Клиент: anthropic.AsyncAnthropic(api_key="sk-dummy", base_url=settings.shadoclaw_base_url)
+
+• GitHub: живой репо bormotun44ik/veeins-test, GITHUB_TOKEN в .env.
+  USE_FAKE_GITHUB=false (дефолт) — живой API. true — fallback на data/fake_team.json.
+
+• Groq: 5 ключей round-robin в .env (GROQ_API_KEY_1..5) — для Whisper.
+
+• SQLite: /app/db/veins.db (в docker volume), одна схема на всех — CONTRACTS.md §SQLite.
+
+• Параллелизм: другие агенты работают одновременно. Если импорт из соседней зоны падает
+  в ImportError — ловишь и делаешь graceful fallback (см. AGENT_TASKS §try/except ImportError).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GIT ПРАВИЛА
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Коммиты: каждые 30-45 минут, сообщение "<agent-letter>: <short what>"
+• Push: только в свою ветку agent/<X>-<name>. НИКОГДА не push в main.
+• После каждого push — отчёт orchestrator'у по шаблону DONE/BLOCKED/CHANGED/NEXT.
+• Если твой код требует правки в файлах вне твоей зоны (CONTRACTS, ARCHITECTURE,
+  docker-compose) — пиши orchestrator'у, не правь сам.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 СТАНДАРТЫ КОДА (обязательно для всех агентов)

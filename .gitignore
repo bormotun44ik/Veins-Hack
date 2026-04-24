@@ -35,3 +35,6 @@ backend/build/
 frontend/build/
 
 # Agent scratch (worktrees живут рядом с репо, а не внутри)
+
+# Personal scratch notes — not for repo
+interwiew.md
