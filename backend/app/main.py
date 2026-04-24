@@ -1,19 +1,47 @@
-"""
-FastAPI entry — скелет. Полную реализацию пишет Agent C.
-"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Veins", version="0.1.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://localhost:5174"],
+                   allow_methods=["*"], allow_headers=["*"])
 
+@app.exception_handler(Exception)
+async def veins_error_handler(request: Request, exc: Exception):
+    from app.errors import VeinsError
+    if isinstance(exc, VeinsError):
+        return JSONResponse(status_code=exc.http_status,
+                            content={"error": {"code": exc.code, "message": str(exc)}})
+    return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL_ERROR", "message": str(exc)}})
+
+@app.on_event("startup")
+async def startup():
+    from app.db import init_db, get_connection
+    init_db()
+    conn = get_connection()
+    try:
+        from app.ingest import ingest_all
+        ingest_all(conn)
+    except ImportError:
+        pass
+    try:
+        from app.signals.composite import update_all_people
+        update_all_people(conn)
+    except ImportError:
+        pass
 
 @app.get("/health")
-def health() -> dict:
+def health():
     return {"status": "ok", "version": "0.1.0"}
+
+# Graph router
+from app.graph.api import router as graph_router
+app.include_router(graph_router)
+
+# LLM router (optional)
+try:
+    from app.llm.api import router as llm_router
+    app.include_router(llm_router)
+except ImportError:
+    pass
