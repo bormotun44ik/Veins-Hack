@@ -82,9 +82,20 @@ worktree: /home/bormotun/Code/veins-agent-a
    - async def pull_github(conn) -> int  — возвращает количество загруженных events
    - Если config.use_fake_github == True → читает data/fake_team.json и данные для events
      оттуда (см. sample_events.jsonl формат)
-   - Если False → тянет через PyGithub за последние 14 дней из repo указанного в .env
-     (GITHUB_REPO env, например "bormotun44ik/Veins-Hack-fake-team")
+   - Если False → тянет через PyGithub за последние 14 дней из config.github_repo
+     (по умолчанию "bormotun44ik/veeins-test")
    - Пишет в таблицы: people, events (type='commit' | 'pr' | 'review'), repos
+
+   МАППИНГ email → person_id (hardcoded, соответствует fake_team.json):
+   EMAIL_TO_ID = {
+     "ivan.petrov@team.dev":    "ivan",
+     "maria.ivanova@team.dev":  "maria",
+     "tom.nielsen@team.dev":    "tom",
+     "anna.kowalska@team.dev":  "anna",
+     "peter.dimitrov@team.dev": "peter",
+   }
+   Коммиты от неизвестных email — пропускать (continue).
+   Если people таблица пустая — засеять из EMAIL_TO_ID + fake_team.json profiles.
 
 4. backend/app/ingest/slack.py
    - async def load_slack(conn) -> int
@@ -103,8 +114,19 @@ worktree: /home/bormotun/Code/veins-agent-a
 
 7. backend/app/ingest/transcript.py
    - async def load_transcript(conn) -> int
-   - Читает data/transcript.json (pre-computed Whisper output)
-   - Из segments считает talk_ratio per speaker → пишет events type='meeting_attended'
+   - Если data/transcript.json существует → читает его (pre-computed, быстро)
+   - Если НЕ существует → транскрибирует data/meeting.mp3 через Groq Whisper:
+       from groq import Groq
+       client = settings.groq_client()  # round-robin из config
+       with open("data/meeting.mp3", "rb") as f:
+           result = client.audio.transcriptions.create(
+               model="whisper-large-v3-turbo",
+               file=f,
+               response_format="verbose_json"
+           )
+       # Сохранить в data/transcript.json для следующих запусков
+   - Из segments считает talk_ratio per speaker (words_spoken / total_words)
+   - Пишет events type='meeting_attended' для каждого speaker
 
 8. backend/app/ingest/__init__.py
    - async def ingest_all(conn) -> dict[str, int]  — вызывает все loaders по очереди,

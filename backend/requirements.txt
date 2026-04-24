@@ -10,6 +10,7 @@ networkx==3.3
 # Ingest
 httpx==0.27.2
 PyGithub==2.4.0
+groq==0.11.0
 
 # LLM
 anthropic==0.39.0
