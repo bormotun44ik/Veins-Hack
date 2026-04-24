@@ -1,4 +1,19 @@
 services:
+  shadoclaw:
+    build: ./vendor/shadoclaw
+    container_name: veins-shadoclaw
+    ports:
+      - "8317:8317"
+    environment:
+      # По умолчанию слушает 127.0.0.1 — внутри контейнера это не доступно снаружи.
+      # Слушаем 0.0.0.0, чтобы порт-forward 8317:8317 работал.
+      - OPENPROXY_HOST=0.0.0.0
+    # OAuth-аккаунты и токены хоста (заранее сделать: openproxy account import main)
+    volumes:
+      - ${HOME}/.config/openproxy:/root/.config/openproxy
+      - ${HOME}/.config/anthropic/q:/root/.config/anthropic/q
+    restart: unless-stopped
+
   backend:
     build: ./backend
     container_name: veins-backend
@@ -13,7 +28,10 @@ services:
     environment:
       - DATABASE_PATH=/app/db/veins.db
       - DATA_DIR=/app/data
-      - SHADOCLAW_BASE_URL=http://host.docker.internal:8317/v1
+      # ВАЖНО: Anthropic SDK сам добавит /v1/messages к base_url → НЕ ставим /v1 в URL
+      - SHADOCLAW_BASE_URL=http://shadoclaw:8317
+    depends_on:
+      - shadoclaw
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Seed только если БД ещё нет (идемпотентно). --fresh сбрасывает кэш LLM —

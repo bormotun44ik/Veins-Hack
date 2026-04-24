@@ -39,3 +39,6 @@ frontend/build/
 # Personal scratch notes — not for repo
 interwiew.md
 frontend/tsconfig.tsbuildinfo
+
+# Third-party code (клонируется инструкцией в README), не тащим в main
+vendor/
