@@ -439,33 +439,105 @@ worktree: /home/bormotun/Code/veins-agent-d
    - def make_prompt_hash(system, user, model) -> str  (из CONTRACTS)
 
 3. backend/app/llm/prompts.py
-   Четыре шаблона — jinja не нужен, f-strings достаточно:
+   Четыре шаблона — f-strings, никакого jinja:
 
-   INSIGHT_SYSTEM = "Ты senior engineering manager с эмпатией ..."
-   def insight_user_prompt(person_context: dict) -> str: ...
-   → output: raw text, 3 буллета insights + 3 буллета actions, парсится regex
+   INSIGHT_SYSTEM = """You are a senior engineering manager with deep empathy.
+Analyze team member signals and provide actionable insights.
+Always respond in valid JSON format exactly as specified.
+Be specific, direct, and human. Avoid corporate speak."""
 
-   ACTION_SYSTEM = "Ты коуч ..."
-   RECOGNITION_SYSTEM = "Ты пишешь тёплое сообщение благодарности ..."
-   COMMIT_TONE_SYSTEM = "Оцени sentiment ... return JSON {sentiment: -1..+1}"
+   def insight_user_prompt(ctx: dict) -> str:
+     return f"""Team member: {ctx['name']} ({ctx['role']})
+Overload score: {ctx['overload_score']:.2f} (0=healthy, 1=critical)
+
+GitHub signals (last 14 days):
+- Night commits ratio: {ctx['signals'].get('night_commits_ratio', 0):.2f} (>0.5 = concerning)
+- Fix/revert ratio: {ctx['signals'].get('fix_revert_ratio', 0):.2f} (>0.4 = firefighting)
+- Commit tone delta: {ctx['signals'].get('commit_tone_delta', 0):.2f} (-1=very negative vs baseline)
+- PR review lag hours: {ctx['signals'].get('pr_review_lag_hours', 0):.1f}
+- Bus factor: {ctx['signals'].get('bus_factor', 0):.2f} (>0.7 = dangerous single owner)
+- Co-author isolation: {ctx['signals'].get('co_author_isolation', 0):.2f} (1=fully isolated)
+- Weekend activity: {ctx['signals'].get('weekend_activity', 0):.2f}
+
+Additional signals:
+- Slack silence days: {ctx.get('mock_signals', {}).get('slack_silence_days', 0)}
+- Velocity delta: {ctx.get('mock_signals', {}).get('velocity_delta', 0):.2f}
+- Back-to-back meetings: {ctx.get('mock_signals', {}).get('back_to_back_meetings_pct', 0):.0%}
+
+Recent activity context ({len(ctx.get('recent_events', []))} events):
+{chr(10).join(f"- [{e['type']}] {e['timestamp'][:10]}: {e['short_text']}" for e in ctx.get('recent_events', [])[:10])}
+
+Team connections: {', '.join(ctx.get('neighbors', [])) or 'none (isolated)'}
+
+Respond ONLY with this JSON (no markdown, no explanation):
+{{
+  "insights": [
+    "specific observation 1 with concrete data",
+    "specific observation 2 with concrete data",
+    "specific observation 3 with concrete data"
+  ],
+  "actions": [
+    "concrete action 1 (who, what, when)",
+    "concrete action 2 (who, what, when)",
+    "concrete action 3 (who, what, when)"
+  ]
+}}"""
+
+   RECOGNITION_SYSTEM = """You write warm, specific recognition messages for team members.
+Be genuine, mention specific contributions, keep it under 3 sentences.
+Respond with plain text only, no JSON."""
+
+   def recognition_user_prompt(ctx: dict) -> str:
+     return f"""Write a recognition message for {ctx['name']} ({ctx['role']}).
+Their recent positive signals: overload score {ctx['overload_score']:.2f} (low = good),
+{len(ctx.get('recent_events', []))} recent contributions.
+Make it specific and human, mention their role in the team."""
+
+   COMMIT_TONE_SYSTEM = """You analyze commit message sentiment.
+Respond ONLY with JSON: {"sentiment": <float between -1.0 and 1.0>}
+-1.0 = very frustrated/negative, 0 = neutral, 1.0 = positive/energetic"""
+
+   def commit_tone_user_prompt(messages: list[str]) -> str:
+     joined = "\n".join(f"- {m}" for m in messages[:20])
+     return f"Analyze the overall sentiment of these commit messages:\n{joined}"
 
 4. backend/app/rag/context.py
    - def build_person_context(person_id: str, conn) -> dict
-   - Возвращает всё что нужно Claude (без embeddings — для MVP):
-       - профиль person (name, role, overload_score, signals)
-       - 1-hop соседи: {neighbor_id, edge_type, weight}
-       - 20 recent events (commit messages, slack msgs): [{type, timestamp, short_text}]
-       - mock signals если есть: slack_silence_days, velocity_delta
-   - Size target: <4000 токенов. Если больше — режь events до 10.
+   - Возвращает всё что нужно Claude:
+       • Читает people row → name, role, overload_score, baseline_sentiment
+       • signals: вызывает все compute() из app.signals (try/except ImportError → {})
+       • mock_signals: читает из people.metadata_json:
+           metadata = json.loads(row['metadata_json'] or '{}')
+           mock_signals = {
+             "slack_silence_days":        metadata.get("slack_silence_days", 0),
+             "velocity_delta":            metadata.get("velocity_delta", 0.0),
+             "back_to_back_meetings_pct": metadata.get("back_to_back_meetings_pct", 0.0),
+           }
+       • recent_events: последние 20 событий → [{type, timestamp, short_text}]
+           short_text = первые 80 символов payload.message или payload.text
+       • neighbors: 1-hop из edges таблицы WHERE src=person_id OR dst=person_id
+   - Size guard: если len(json.dumps(ctx)) > 12000 байт → обрезать recent_events до 8
+   - Если person не найден → return {} (caller поднимет PersonNotFound)
 
 5. backend/app/llm/api.py
    - from fastapi import APIRouter
    - GET /insights/{person_id}
      • context = build_person_context(id, conn)
-     • если context пустой → PersonNotFound
+     • если context пустой → raise PersonNotFound
      • cache_key = make_cache_key("insight", id, sha256(json(context))[:16])
-     • text = await ask("opus", INSIGHT_SYSTEM, insight_user_prompt(context), cache_key)
-     • parse text → {insights: [str, str, str], actions: [str, str, str]}
+     • raw = await ask("opus", INSIGHT_SYSTEM, insight_user_prompt(context), cache_key)
+     • Парсинг — JSON first, regex fallback:
+         try:
+             parsed = json.loads(raw)
+             insights = parsed["insights"][:3]
+             actions  = parsed["actions"][:3]
+         except (json.JSONDecodeError, KeyError):
+             # fallback: извлечь строки между кавычками
+             insights = re.findall(r'"([^"]{20,})"', raw)[:3]
+             actions  = insights  # worst case
+         # Если меньше 3 элементов — дополнить заглушками
+         while len(insights) < 3: insights.append("No additional insights available")
+         while len(actions)  < 3: actions.append("Schedule a 1:1 to discuss workload")
      • return {person_id, generated_at, model, cached, insights, actions}
 
    - POST /action/recognition/{person_id}
