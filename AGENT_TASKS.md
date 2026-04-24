@@ -610,21 +610,31 @@ worktree: /home/bormotun/Code/veins-agent-e
    - postRecognition(id) → {text: string}
 
 4. src/components/GraphView.tsx:
-   - ForceGraph3D с nodeVal = node.overload_score * 8 + 4
-   - nodeColor по status (green/yellow/red из DESIGN)
-   - linkColor = белый с opacity 0.3
-   - onNodeClick → вызов prop callback
+   - ForceGraph3D — следуй DESIGN.md §GraphView для всех параметров
+   - nodeVal = selectedId === node.id ? (overload*10+4)*1.6 : (overload*10+4)
+     → выбранная нода на 60% больше (визуальный feedback клика)
+   - nodeColor: выбранная → "#ffffff", остальные по status из DESIGN
+   - linkColor = "rgba(255,255,255,0.12)"
+   - backgroundColor = "#0a0a0a"
+   - nodeLabel = node => `${node.name} (${node.role})`
+   - onNodeClick → вызов prop callback с node.id
 
 5. src/components/LayerToggle.tsx:
    - Три кнопки в шапке, segmented control
    - onChange(layer) → родитель делает fetchGraph(layer)
 
 6. src/components/InsightPanel.tsx:
-   - Если selected === null → пустое состояние "Select a person"
-   - Если selected: header (avatar, name, role, status badge, overload bar)
-   - Секция Signals (6-7 прогресс-баров)
-   - Секция Insights (3 bullet пункта, fade-in анимация)
-   - ActionButtons
+   - Следуй DESIGN.md §InsightPanel для всей разметки и цветов
+   - Если selected === null → Empty state (см. DESIGN §Empty State)
+   - Если selected !== null:
+     • Сразу рендерить Person Card из personData (загружается быстро)
+     • Signals section — из personData.signals (прогресс-бары, см. DESIGN)
+     • Insights section:
+         isLoadingInsights=true  → skeleton (3 animate-pulse бара, см. DESIGN)
+         isLoadingInsights=false → bullets с animate-fadeIn (delay 0/80/160ms)
+     • State: const [isLoadingInsights, setIsLoading] = useState(false)
+       При смене selectedId: setIsLoading(true) → fetch → setIsLoading(false)
+   - ActionButtons внизу (см. DESIGN §ActionButtons)
 
 7. src/components/ActionButtons.tsx:
    - "Что делать" (primary) → показать actions из insights
