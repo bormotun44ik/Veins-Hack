@@ -1,0 +1,32 @@
+{
+  "files_owned": {
+    "ivan": ["src/auth.py", "src/session.py", "src/token.py", "src/permissions.py"],
+    "maria": ["src/api/users.py", "src/db/migrations.py", "src/api/teams.py"],
+    "tom": ["src/validators.py", "src/rate_limit.py"],
+    "anna": ["src/frontend/dashboard.tsx", "src/frontend/graph.tsx", "src/frontend/insight_panel.tsx"],
+    "nikita": ["src/frontend/layer_toggle.tsx", "src/frontend/person_card.tsx"],
+    "peter": ["tests/integration/test_auth.py", "tests/regression/test_api.py", "tests/smoke.sh"],
+    "marina": []
+  },
+  "incidents_last_30d": [
+    {"date": "2026-04-22", "module": "auth", "responder": "ivan", "duration_h": 4.5},
+    {"date": "2026-04-18", "module": "auth", "responder": "ivan", "duration_h": 2.0},
+    {"date": "2026-04-14", "module": "session", "responder": "ivan", "duration_h": 3.0},
+    {"date": "2026-04-10", "module": "auth", "responder": "ivan", "duration_h": 6.0},
+    {"date": "2026-04-05", "module": "token", "responder": "ivan", "duration_h": 1.5},
+    {"date": "2026-03-29", "module": "auth", "responder": "ivan", "duration_h": 2.5},
+    {"date": "2026-04-20", "module": "api", "responder": "tom", "duration_h": 0.5}
+  ],
+  "pr_reviews_pending": [
+    {"pr_id": "PR-42", "author": "tom", "reviewers_needed": ["ivan"], "open_since": "2026-04-19T10:00:00Z", "blocked": true},
+    {"pr_id": "PR-48", "author": "anna", "reviewers_needed": ["maria"], "open_since": "2026-04-22T14:00:00Z", "blocked": false}
+  ],
+  "file_bus_factor": {
+    "src/auth.py": {"owners": ["ivan"], "contributors_last_90d": 1, "incident_count": 5},
+    "src/session.py": {"owners": ["ivan"], "contributors_last_90d": 1, "incident_count": 2},
+    "src/token.py": {"owners": ["ivan"], "contributors_last_90d": 1, "incident_count": 1},
+    "src/permissions.py": {"owners": ["ivan"], "contributors_last_90d": 1, "incident_count": 0},
+    "src/api/users.py": {"owners": ["maria", "tom"], "contributors_last_90d": 2, "incident_count": 0},
+    "src/validators.py": {"owners": ["tom"], "contributors_last_90d": 2, "incident_count": 0}
+  }
+}
