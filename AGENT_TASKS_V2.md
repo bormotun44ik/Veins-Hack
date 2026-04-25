@@ -241,12 +241,43 @@ worktree: ../veins-agent-i
   frontend/src/components/AttentionCard.tsx      ← новый
   frontend/src/components/ShoutoutCard.tsx       ← новый
   frontend/src/components/ViewToggle.tsx         ← новый (Dashboard | Graph)
-  frontend/public/samples/sample_dashboard.json  ← скопировать из data/samples/
+  frontend/src/components/GraphPage.tsx          ← новый (рефакторинг — см. App.tsx)
+  frontend/public/samples/sample_dashboard.json  ← копируешь ОДИН РАЗ в первом коммите
+                                                   из data/samples/. Дальше Vite раздаёт.
 
 И ИЗМЕНЕНИЯ (минимум) в существующих:
   frontend/src/types.ts            — добавить DashboardResponse + типы
   frontend/src/api.ts              — добавить fetchDashboard()
-  frontend/src/App.tsx             — добавить view-switch (Dashboard / Graph)
+  frontend/src/App.tsx             — рефакторинг: вынести существующий graph-layout
+                                     в GraphPage.tsx, App.tsx становится тонким switcher
+
+ВАЖНО (рефакторинг App.tsx):
+  Phase 1 имеет в App.tsx state (layer/selectedPersonId/graphData/insightData)
+  и весь graph layout (header + GraphView + sidebar + InsightPanel).
+  Чтобы не наплодить спагетти — выноси ВСЁ это в новый GraphPage.tsx (move,
+  не copy — старый код удаляется из App.tsx). После рефакторинга App.tsx:
+
+    export default function App() {
+      const [view, setView] = useState<"dashboard"|"graph">("dashboard")
+      const [selectedId, setSelectedId] = useState<string|null>(null)
+      return (
+        <div className="h-screen flex flex-col bg-[--bg-primary]">
+          <header className="flex items-center justify-between px-4 h-12 border-b border-[--border]">
+            <div className="flex items-center gap-4">
+              <span className="font-mono text-sm text-[--accent]">◈ veins</span>
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+            <span className="font-mono text-xs text-[--text-tertiary]">v0.1.0</span>
+          </header>
+          {view === "dashboard"
+            ? <Dashboard onSelectPerson={(id) => { setSelectedId(id); setView("graph") }} />
+            : <GraphPage selectedId={selectedId} setSelectedId={setSelectedId} />}
+        </div>
+      )
+    }
+
+  GraphPage.tsx содержит layer-state, fetchGraph, существующий GraphView+InsightPanel layout.
+  LayerToggle [Stress|Collab|Workload] остаётся ВНУТРИ GraphPage (не в App header).
 
 ЗАДАЧА:
   Manager Dashboard — первый экран что видит пользователь. Click на attention card
@@ -294,19 +325,49 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
 КОМПОНЕНТЫ:
 
 1. Dashboard.tsx
-   - useEffect: fetchDashboard() при mount + setInterval(10000) для polling
+   - useEffect с polling: КАЖДЫЕ 10 сек ТОЛЬКО для /dashboard endpoint
+     (orchestrator отдельно добавит polling 5 сек для /graph и /person в GraphPage —
+     не пересекаются, разные endpoints).
+   - ОБЯЗАТЕЛЬНО cleanup в useEffect — без этого memory leak когда юзер
+     переключился в Graph view:
+
+       useEffect(() => {
+         const ctrl = new AbortController()
+         let timer: NodeJS.Timeout
+
+         const tick = async () => {
+           try {
+             const data = await fetchDashboard(ctrl.signal)
+             setDashboard(data)
+           } catch (e) {
+             if (!ctrl.signal.aborted) console.error("dashboard fetch:", e)
+           }
+         }
+
+         tick()  // immediate
+         timer = setInterval(tick, 10000)
+
+         return () => { clearInterval(timer); ctrl.abort() }
+       }, [])
+
    - useState<DashboardResponse | null>
-   - Loading: skeleton (не lorem, просто пульсирующие placeholder-ы)
+   - Loading: skeleton с animation pulse (см. DESIGN.md §CSS Animations).
+     Используй `.animate-pulse` Tailwind class на placeholder-divах.
    - props: onSelectPerson(id) — для перехода в graph view
 
 2. AttentionCard.tsx
    - props: person, onSelectPerson, onRecognition
    - Большая карточка, status badge справа, overload bar progress
    - 2 строки: › top_insight (text-secondary), → top_action (accent)
+   - Если top_insight === "" (cache miss на бэке) — показать "warm cache via prewarm"
+     placeholder вместо строки.
    - 2 кнопки: "View details" (primary, фокусит graph view), "Recognition" (subtle)
 
 3. ShoutoutCard.tsx
    - Маленькая карточка-кубик, avatar + name + overload%, кнопка Recognition
+   - Recognition button вызывает api.postRecognition(id) НАПРЯМУЮ.
+     НЕ переиспользуй ActionButtons.tsx (он остаётся в InsightPanel sidebar).
+     Свой локальный обработчик: setLoading → fetch → показать modal или toast с текстом.
 
 4. HeatmapMatrix.tsx
    - props: heatmap data
@@ -319,21 +380,20 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
    - Заголовки колонок: моноширинный xs
 
 5. ViewToggle.tsx
-   - Segmented control в header: [Dashboard] [Graph]
+   - Segmented control. ВНИМАНИЕ: рендерится в App.tsx header **слева** (рядом с
+     "◈ veins"), НЕ в центре. Центр header пуст — это для визуальной чистоты.
+     LayerToggle [Stress|Collab|Workload] живёт ВНУТРИ GraphPage (не header App.tsx),
+     потому что он имеет смысл только в graph view.
    - props: view: "dashboard"|"graph", onChange
 
-6. App.tsx (минимальные правки):
-   const [view, setView] = useState<"dashboard"|"graph">("dashboard")
-   const [selectedId, setSelectedId] = useState<string|null>(null)
+6. App.tsx — см. секцию "ВАЖНО (рефакторинг App.tsx)" выше. Тонкий switcher.
 
-   <ViewToggle view={view} onChange={setView} />
-
-   {view === "dashboard" && (
-     <Dashboard onSelectPerson={(id) => { setSelectedId(id); setView("graph") }} />
-   )}
-   {view === "graph" && (
-     <>{existing graph + sidebar layout}</>
-   )}
+7. GraphPage.tsx — move существующего graph-layout сюда:
+   - useState<Layer>("stress"), useState<GraphResponse|null>, etc.
+   - useEffect fetchGraph при смене layer
+   - Header sub-bar: LayerToggle [Stress|Collab|Workload] прямо над графом
+   - Layout: GraphView + InsightPanel sidebar (как было в App.tsx Phase 1)
+   - props: selectedId, setSelectedId — поднято в App.tsx чтобы выживало переключение view
 
 ОГРАНИЧЕНИЯ:
   • Не трогай GraphView.tsx, InsightPanel.tsx, LayerToggle.tsx (сохрани как есть)
@@ -406,17 +466,42 @@ worktree: ../veins-agent-j
    def recompute_cheap(person_id: str, conn) -> dict
      """
      Считает overload БЕЗ tone_delta (LLM call дорог в realtime).
-     Использует existing signals.composite.WEIGHTS:
-       - night_commits, fix_revert, pr_lag, bus_factor,
-         co_isolation, weekend_activity (cheap, no LLM)
-       - tone_delta — берёт КЭШИРОВАННОЕ значение из people.metadata_json
-         (если есть — используется в weighted sum, иначе 0.5 как neutral)
+
+     ВАЖНО: WEIGHTS дублируются ЛОКАЛЬНО (не импортируем из signals.composite).
+     Это сознательная изоляция — если signals меняет веса, ingest должен
+     осознанно сменить тоже. Comment: "synced from signals.composite WEIGHTS".
+
+         WEIGHTS = {
+             "night_commits": 0.20,
+             "fix_revert":    0.15,
+             "tone_delta":    0.20,
+             "pr_lag":        0.10,
+             "bus_factor":    0.10,
+             "co_isolation":  0.15,
+             "weekend":       0.10,
+         }
+
+     Логика:
+       - night_commits, fix_revert, pr_lag, bus_factor, co_isolation,
+         weekend_activity — call signals.<name>.compute(pid, conn) (cheap, no LLM)
+       - tone_delta — берёт КЭШИРОВАННОЕ значение из people.metadata_json:
+           meta = json.loads(row['metadata_json'] or '{}')
+           tone = meta.get('tone_delta_cached', 0.0)
+         Fallback **0.0** (НЕ 0.5) — синхронизация с Agent H.
+         0.0 = "no data" → ячейка прозрачная в heatmap.
+         0.5 было бы misleading "neutral signal" значением.
+
      Возвращает {
        "old_score": текущий people.overload_score до пересчёта,
        "new_score": посчитанный score,
        "recomputed": list имён сигналов которые реально пересчитались
+                     (всегда 6 cheap signals, tone_delta помечается "cached" если был)
      }
      В конце UPDATE people SET overload_score = new_score WHERE id=?
+
+     SQLite concurrency: db.py использует singleton _conn с check_same_thread=False.
+     Не открывай новые connections — INSERT events + UPDATE people в одной
+     транзакции через один cur. SQLite сам сериализует writes.
 
 2. ingest/api.py:
    from fastapi import APIRouter, Body
@@ -433,8 +518,10 @@ worktree: ../veins-agent-j
 
    router = APIRouter()
 
+   # async def — единообразие с другими endpoints в проекте (FastAPI рекомендация).
+   # recompute_cheap внутри pure sync (sqlite + signals.compute), это OK.
    @router.post("/ingest/event")
-   def ingest_event(body: IngestEventBody):
+   async def ingest_event(body: IngestEventBody):
      from app.db import get_connection
      from app.ingest.recompute import recompute_cheap
      from datetime import datetime, timezone
@@ -448,10 +535,16 @@ worktree: ../veins-agent-j
      if body.type not in VALID_TYPES:
        raise BadEvent(f"Invalid type: {body.type}")
 
+     # Защита: ограничь размер payload (50KB разумно).
+     # SQLite примет любой размер, но огромный JSON не имеет смысла.
+     payload_str = json.dumps(body.payload)
+     if len(payload_str) > 50_000:
+       raise BadEvent(f"Payload too large: {len(payload_str)} bytes (max 50000)")
+
      ts = body.timestamp or datetime.now(timezone.utc).isoformat()
      cur = conn.execute(
        "INSERT INTO events (person_id, type, timestamp, payload_json) VALUES (?,?,?,?)",
-       (body.person_id, body.type, ts, json.dumps(body.payload))
+       (body.person_id, body.type, ts, payload_str)
      )
      event_id = cur.lastrowid
      conn.commit()
@@ -491,9 +584,12 @@ DoD:
                        "co_authors":[],"files_touched":["src/auth.py"]}}'
      → 200 со старым/новым overload_score
   2. SELECT COUNT(*) FROM events после POST → +1
-  3. Score Ivan'а слегка вырос (+0.01..+0.05)
+  3. Score Ivan'а изменился (delta != 0). Точная величина зависит от
+     текущего количества events: 1 night-commit поверх 60 уже имеющихся
+     даст микро-сдвиг (~+0.003), это нормально. Главное — old != new.
   4. Invalid type → 400 BAD_EVENT
   5. Несуществующий person → 404 PERSON_NOT_FOUND
+  6. Payload >50KB → 400 BAD_EVENT с понятным сообщением
 
 ОТЧЁТ.
 ```
@@ -531,8 +627,12 @@ worktree: ../veins-agent-k
 
 ПРИМЕРЫ:
   python scripts/push_event.py ivan commit "fix: revert broke prod again" --night
-  python scripts/push_event.py ivan slack "не успею к утру"
+  python scripts/push_event.py ivan slack_msg "не успею к утру"
   python scripts/push_event.py maria commit "feat: new dashboard"
+
+ВАЛИДНЫЕ TYPES (точно как в CONTRACTS):
+  commit | slack_msg | meeting_attended | task_update | review | pr
+  ⚠️ "slack" БЕЗ "_msg" — невалидно, упадёт BAD_EVENT.
 
 ОЖИДАЕМЫЙ OUTPUT:
   🚀 Pushing event to http://127.0.0.1:8000/ingest/event
@@ -549,9 +649,12 @@ worktree: ../veins-agent-k
 
 1. scripts/push_event.py:
    - argparse: positional person_id, type, optional message
-   - --night → timestamp = today at 02:47 UTC
-   - --weekend → timestamp = ближайшая суббота 14:00 UTC
-   - default → timestamp = now
+   - --night → timestamp всегда в "ночь только что прошедшую":
+       now = datetime.now(UTC); today_2am = now.replace(hour=2, minute=47, second=0, microsecond=0)
+       if now < today_2am: today_2am -= timedelta(days=1)  # ещё не дошли до 02:47 сегодня
+       Возвращает today_2am. Это попадает в last 14d окно сигналов всегда.
+   - --weekend → последняя прошедшая суббота 14:00 UTC
+   - default → timestamp = now (UTC ISO8601)
    - Для type='commit' автоматически генерит payload:
        {"sha": <random 7hex>, "message": <message or "fix: untitled">,
         "repo_id":"veins-core", "branch":"main", "co_authors":[],
@@ -562,18 +665,27 @@ worktree: ../veins-agent-k
    - POST через urllib.request (без http клиентов, чтобы не тащить deps)
    - Pretty print результата с цветами (если sys.stdout.isatty()):
        🚀 ✅ → ANSI green/yellow/red по статусу
+   - При ошибке от backend печатать дружелюбно. Например 404:
+       ❌ Error 404: person 'nobody' not found.
+       Available people: ivan, maria, tom, anna, peter
+       (список бери из data/fake_team.json или зашитый константой)
+     При 400 BAD_EVENT: показать текст message от backend как есть.
 
 2. scripts/demo_replay.sh (опционально):
    #!/usr/bin/env bash
-   # Прогоняет 3-4 события для демо с задержкой
+   # Прогоняет 3-4 события для демо с задержкой.
+   # ВАЖНО: задержка >= polling interval frontend'а (10 сек на dashboard,
+   # 5 сек на graph). Иначе 2 события объединятся в одно визуальное
+   # обновление и WOW-эффект пропадёт.
    set -e
    echo "Press Enter to push event 1: Ivan night commit"
    read
    python scripts/push_event.py ivan commit "fix: revert broke prod again" --night
-   sleep 3
+   sleep 12  # подождём что polling успел показать обновление
    echo "Press Enter to push event 2: Ivan slack at 3am"
    read
    python scripts/push_event.py ivan slack_msg "не успею, всё ломается"
+   sleep 12
    ...
 
 ОГРАНИЧЕНИЯ:
@@ -611,31 +723,56 @@ H/I/J/K независимы — стартуют одновременно. K м
 
 1. git fetch --all
 2. merge agent/h-dashboard-backend → main
-3. merge agent/i-dashboard-frontend → main (resolve App.tsx если есть)
+3. merge agent/i-dashboard-frontend → main
+   ⚠ App.tsx будет полностью переписан (рефакторинг в GraphPage). Мерж простой:
+   берём I-версию целиком — старый код Phase 1 теперь в GraphPage.tsx.
 4. merge agent/j-live-ingest → main
 5. merge agent/k-push-event → main
-6. Frontend polling (orchestrator сам добавит, 15 строк в App.tsx)
-7. docker compose up --build → smoke + manual test
-8. prewarm_cache.py (включая новый dashboard primary_reason)
+6. Polling в GraphPage (orchestrator сам добавит, 15 строк):
+   - dashboard polling — Agent I уже сделал (10 сек)
+   - graph polling — добавляю в GraphPage (5 сек, вызовет fetchGraph(layer))
+   - person polling — НЕ нужен, /person читается только при клике на ноду
+7. Обновить scripts/prewarm_cache.py — добавить dashboard прогрев:
+   - Сделать GET /dashboard один раз → это прогреет primary_reason для всех
+     attention persons (Ivan на текущих данных)
+8. docker compose up --build → smoke + manual test
+9. python scripts/prewarm_cache.py — все insights+recognition+dashboard
 
 ### После integration
 
 - /dashboard → 200 с правильной структурой
-- Кнопка View details → переход на graph
-- POST /ingest/event → frontend через 5-10 сек обновляется
+- Кнопка View details → переход на graph (selectedId сохраняется)
+- POST /ingest/event → dashboard через 10 сек, graph через 5 сек обновляется
 - Демо-сценарий: ты пушишь "ivan night commit" вручную, граф мерцает Ивану
 
 ---
 
 ## Чеклист orchestrator'а
 
-- [ ] CONTRACTS.md обновлён под Phase 2 (sections /dashboard и /ingest/event)
-- [ ] data/samples/sample_dashboard.json создан
-- [ ] AGENT_TASKS_V2.md запушен в main
+- [x] CONTRACTS.md обновлён под Phase 2 (sections /dashboard и /ingest/event)
+- [x] data/samples/sample_dashboard.json создан
+- [x] AGENT_TASKS_V2.md запушен в main (с правками после ревью Лилит и self-review)
 - [ ] Передать Лилит этот файл
 - [ ] Лилит запускает H, I, J, K параллельно
 - [ ] git fetch каждые 15-20 мин
 - [ ] Merge ветки в порядке H → I → J → K
-- [ ] Добавить frontend polling (orchestrator сам)
+- [ ] Добавить graph polling в GraphPage (orchestrator)
+- [ ] Обновить scripts/prewarm_cache.py: добавить /dashboard вызов
+- [ ] docker compose up --build → smoke 12/12 + новые endpoints
+- [ ] prewarm — все insights/recognition/dashboard primary_reason'ы
+
+## Известные нюансы (после self-review)
+
+- **Polling stratification:** /dashboard каждые 10 сек (Agent I), /graph каждые
+  5 сек (orchestrator после merge). НЕ оба в App.tsx — каждый в своей странице,
+  cleanup при unmount.
+- **Frontend public/samples:** Agent I копирует sample_dashboard.json один раз
+  в первом коммите. Дальше Vite раздаёт автоматом, не нужно перекопировать.
+- **WEIGHTS дублируются** в `signals/composite.py` и `ingest/recompute.py`.
+  Это сознательная изоляция — если меняешь, синхронизируй обе.
+- **tone_delta fallback везде = 0.0** (не 0.5). H, J, и frontend HeatmapMatrix —
+  все три используют 0.0 как "no data" → прозрачная heatmap-ячейка.
+- **App.tsx рефакторится в тонкий switcher.** Старый layout уезжает в
+  GraphPage.tsx (Agent I делает полный move, не copy).
 - [ ] Smoke test после integration
 - [ ] Prewarm cache (с primary_reason)
