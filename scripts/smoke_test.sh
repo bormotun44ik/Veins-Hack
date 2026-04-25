@@ -57,7 +57,7 @@ echo "[Backend]"
 check "GET /health → 200"              "curl -sf $BASE/health"
 jqcheck "/health.status == ok"         "$BASE/health" "d['status']" "ok"
 
-jqcheck "/graph?layer=stress — 5 nodes" "$BASE/graph?layer=stress" "len(d['nodes'])" "5"
+jqcheck "/graph?layer=stress — 7 nodes (Phase 3 roster)" "$BASE/graph?layer=stress" "len(d['nodes'])" "7"
 jqcheck "/graph?layer=collab — >=4 links" "$BASE/graph?layer=collab" "1 if len(d['links'])>=4 else 0" "1"
 jqcheck "/graph?layer=workload — >=15 nodes" "$BASE/graph?layer=workload" "1 if len(d['nodes'])>=15 else 0" "1"
 
