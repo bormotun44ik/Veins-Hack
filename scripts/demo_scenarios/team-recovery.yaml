@@ -1,0 +1,27 @@
+name: "Team recovery"
+description: "Ivan returns to daytime work, Marina celebrates, Tom unblocks — healthy signals"
+events:
+  - person: ivan
+    type: commit
+    message: "refactor: extract auth helpers — tech debt cleanup"
+    delay_sec: 0
+  - person: ivan
+    type: commit
+    message: "feat: add auth module docs for onboarding"
+    delay_sec: 12
+  - person: marina
+    type: slack_msg
+    message: "@ivan great to see you back on features — well done this week"
+    delay_sec: 22
+  - person: tom
+    type: commit
+    message: "fix: resolved all review comments on PR-42"
+    delay_sec: 32
+  - person: maria
+    type: slack_msg
+    message: "team velocity looking good, sprint on track 💪"
+    delay_sec: 45
+  - person: nikita
+    type: slack_msg
+    message: "@anna finished the component, all tests passing!"
+    delay_sec: 58

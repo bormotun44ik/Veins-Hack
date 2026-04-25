@@ -1,0 +1,31 @@
+name: "Ivan burns out over evening"
+description: "Demonstrates how burnout signals escalate live — 6 events over ~40 seconds"
+events:
+  - person: ivan
+    type: commit
+    message: "hotfix: prod auth crash again"
+    delay_sec: 0
+    night: true
+  - person: tom
+    type: slack_msg
+    message: "@ivan PR-42 нужен срочно, блокер"
+    delay_sec: 8
+  - person: ivan
+    type: slack_msg
+    message: "опять баг в auth, разбираюсь"
+    delay_sec: 16
+    night: true
+  - person: ivan
+    type: commit
+    message: "revert: rolled back, broke worse"
+    delay_sec: 24
+    night: true
+  - person: marina
+    type: slack_msg
+    message: "@ivan ты ок? давай 1:1 завтра"
+    delay_sec: 32
+  - person: ivan
+    type: slack_msg
+    message: "не успею к утру"
+    delay_sec: 40
+    night: true

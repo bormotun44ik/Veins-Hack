@@ -1,0 +1,62 @@
+name: "Random day at the office"
+description: "Typical day — mix of all team members, realistic spread over 5+ minutes"
+events:
+  - person: maria
+    type: commit
+    message: "feat: add user search endpoint"
+    delay_sec: 0
+  - person: nikita
+    type: slack_msg
+    message: "@anna правильно ли я понял задачу?"
+    delay_sec: 18
+  - person: anna
+    type: commit
+    message: "fix: button alignment on mobile"
+    delay_sec: 35
+  - person: anna
+    type: slack_msg
+    message: "@nikita да, именно так — хорошая интерпретация"
+    delay_sec: 50
+  - person: ivan
+    type: commit
+    message: "fix: null pointer in session handler"
+    delay_sec: 68
+    night: true
+  - person: peter
+    type: slack_msg
+    message: "прогон тестов чисто на staging"
+    delay_sec: 90
+  - person: tom
+    type: commit
+    message: "fix: edge case in request validator"
+    delay_sec: 110
+  - person: marina
+    type: slack_msg
+    message: "@team стэндап через 5 минут"
+    delay_sec: 135
+  - person: ivan
+    type: slack_msg
+    message: "разбираюсь со вчерашним auth багом"
+    delay_sec: 155
+    night: true
+  - person: maria
+    type: slack_msg
+    message: "PR #47 готово к ревью, небольшое"
+    delay_sec: 178
+  - person: peter
+    type: commit
+    message: "test: regression for auth module TASK-15"
+    delay_sec: 200
+  - person: nikita
+    type: commit
+    message: "learn: refactored component per Anna feedback"
+    delay_sec: 220
+  - person: tom
+    type: slack_msg
+    message: "@maria апрувни PR-42, всё готово"
+    delay_sec: 242
+  - person: ivan
+    type: commit
+    message: "hotfix: token expiry edge case"
+    delay_sec: 264
+    night: true
