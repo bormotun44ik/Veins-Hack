@@ -16,3 +16,7 @@ class BadLayer(VeinsError):
 class LLMUnavailable(VeinsError):
     code = "LLM_UNAVAILABLE"
     http_status = 503
+
+class BadEvent(VeinsError):
+    code = "BAD_EVENT"
+    http_status = 400
