@@ -45,3 +45,10 @@ try:
     app.include_router(llm_router)
 except ImportError:
     pass
+
+# Ingest API router (phase 2 — Agent J)
+try:
+    from app.ingest.api import router as ingest_api_router
+    app.include_router(ingest_api_router)
+except ImportError:
+    pass
