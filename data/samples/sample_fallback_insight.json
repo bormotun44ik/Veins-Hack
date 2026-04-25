@@ -1,0 +1,17 @@
+{
+  "person_id": "ivan",
+  "generated_at": "2026-04-25T10:00:00Z",
+  "model": "fallback-template",
+  "cached": false,
+  "fallback": true,
+  "insights": [
+    "Ivan Petrov: night commits ratio 100%, fix revert ratio 100%, co-author isolation 100% — composite overload 0.78.",
+    "Trend (3mo→now): Tone +0.6 → -0.7, night 10%→95%, fix 15%→96%.",
+    "Ranks #1 most overloaded in team (team avg 0.32)."
+  ],
+  "actions": [
+    "Discuss: Is there an active incident driving night work?",
+    "Discuss: Who else can pair on critical modules to reduce bus factor?",
+    "Discuss: Is 1:1 cadence appropriate (weekly vs bi-weekly)?"
+  ]
+}

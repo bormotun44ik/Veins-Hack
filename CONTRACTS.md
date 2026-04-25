@@ -696,13 +696,291 @@ FastAPI exception handler ловит VeinsError → возвращает JSON п
 
 ---
 
+## Phase 3 — расширения (mock data + trend insights + embeddings + fallback)
+
+### Team roster (расширенный)
+
+7 человек вместо 5. Архетипы:
+
+| id | name | role | archetype | overload target |
+|---|---|---|---|---|
+| ivan | Ivan Petrov | Senior Backend Engineer | burnout (firefighter) | 0.78 RED |
+| marina | Marina Sokolova | Engineering Manager | overwhelmed-leader | 0.62 YELLOW |
+| maria | Maria Ivanova | Tech Lead | healthy-leader | 0.34 GREEN |
+| tom | Tom Nielsen | Backend Engineer | moderate-load | 0.37 GREEN |
+| anna | Anna Kowalska | Frontend Engineer | healthy | 0.26 GREEN |
+| nikita | Nikita Volkov | Junior Frontend Engineer | learning | 0.22 GREEN |
+| peter | Peter Dimitrov | QA Engineer | healthy | 0.20 GREEN |
+
+Marina — новая роль "manager" — фокус на team velocity, контекст-свитчинг между proектами.
+Nikita — новый "junior" — фокус на growth + safety, меньше production-ответственности.
+
+### Trend dataset (3 месяца истории)
+
+Не сырые 600 events на человека — компактная агрегация по неделям:
+
+```json
+// data/historical_signals.json
+{
+  "ivan": {
+    "weekly_summary": [
+      {"week_start": "2026-01-26", "night_commits": 0.10, "fix_revert": 0.15,
+       "tone_score": 0.6, "co_authors": 4, "events_count": 38},
+      {"week_start": "2026-02-02", "night_commits": 0.12, "fix_revert": 0.18,
+       "tone_score": 0.55, "co_authors": 3, "events_count": 41},
+      // ... 12 weeks total
+      {"week_start": "2026-04-13", "night_commits": 0.95, "fix_revert": 0.92,
+       "tone_score": -0.7, "co_authors": 0, "events_count": 52}
+    ],
+    "narrative_baseline": "Ivan 3 months ago: feature builder, 4 collaborators, daytime work",
+    "narrative_current":  "Ivan now: solo firefighter, 0 collaborators, night-only"
+  },
+  // ... per person
+}
+```
+
+Используется в `historical_signals_3m_ago` поле context.
+
+### Trickle generator (live data на демо)
+
+`scripts/trickle.py` — фоновый процесс, эмулирует поток событий.
+
+```bash
+# config defaults: 1 event per 10 sec
+python scripts/trickle.py --rate 10 --duration 600
+# или с конкретным сценарием:
+python scripts/trickle.py --scenario ivan-burns-out
+# burst для драматизма:
+python scripts/trickle.py --burst 5
+```
+
+Сценарии в `scripts/demo_scenarios/*.yaml`:
+
+```yaml
+# ivan-burns-out.yaml
+name: "Ivan burns out over evening"
+events:
+  - person: ivan
+    type: commit
+    message: "fix: prod auth crash again"
+    delay_sec: 0
+    night: true
+  - person: ivan
+    type: slack_msg
+    message: "не успею к утру"
+    delay_sec: 8
+    night: true
+  - person: tom
+    type: slack_msg
+    message: "@ivan нужно ревью PR-42, блокер"
+    delay_sec: 15
+  - person: ivan
+    type: commit
+    message: "revert: rolled back, broke worse"
+    delay_sec: 22
+    night: true
+```
+
+### Trend & peer-aware insights — extended context
+
+`backend/app/rag/context_v2.py` возвращает context с новыми полями:
+
+```python
+{
+  # ... existing fields ...
+
+  "historical_signals_3m_ago": {
+    "night_commits_ratio": 0.10,    # avg за неделю 12 (3 мес назад)
+    "fix_revert_ratio": 0.15,
+    "tone_score": 0.6,
+    "co_authors_avg": 4,
+  },
+  "trend_narrative": {
+    "baseline": "Ivan 3 months ago: feature builder, daytime, 4 collaborators",
+    "current":  "Ivan now: night firefighter, 0 collaborators",
+    "delta_summary": "Tone dropped 0.6 → -0.7. Night work 10% → 95%. Isolation 0 → 1.0."
+  },
+  "peer_comparison": {
+    "team_avg_overload": 0.32,
+    "team_median_overload": 0.27,
+    "person_overload": 0.78,
+    "rank_in_team": 1,  # Ivan = #1 most overloaded
+    "best_peer": {"id": "peter", "overload": 0.20, "role": "QA Engineer"},
+    "best_peer_pattern": "Peter at similar tenure: 0% night work, 80% test coverage focus"
+  },
+  "role_focus": {
+    "role": "Senior Backend Engineer",
+    "primary_concerns": ["technical debt", "system reliability", "knowledge transfer"],
+    "manager_questions": [
+      "Is there an active incident driving night work?",
+      "Who else can pair on auth-module to reduce bus factor?",
+      "Is 1:1 cadence appropriate (weekly vs bi-weekly)?"
+    ]
+  },
+
+  # Optional: top-K relevant chunks из RAG retrieval (Agent P)
+  "retrieved_chunks": [
+    {"text": "fix: auth race in token cache", "type": "commit", "timestamp": "...", "relevance": 0.89},
+    {"text": "опять баг в auth, 3-я ночь подряд", "type": "slack_msg", "timestamp": "...", "relevance": 0.82},
+    # top 8 chunks
+  ]
+}
+```
+
+### Role focus mapping
+
+`backend/app/rag/role_focus.py` — статическая таблица:
+
+```python
+ROLE_FOCUS = {
+    "Senior Backend Engineer":   { primary_concerns: [...], manager_questions: [...] },
+    "Engineering Manager":       { primary_concerns: ["team velocity", "context switching",
+                                                       "1:1 quality", "stakeholder mgmt"], ... },
+    "Tech Lead":                 { primary_concerns: ["bandwidth", "mentorship", "review load"], ... },
+    "Backend Engineer":          { primary_concerns: ["technical execution", "ownership"], ... },
+    "Frontend Engineer":         { primary_concerns: ["UX quality", "design alignment"], ... },
+    "Junior Frontend Engineer":  { primary_concerns: ["growth", "safety net", "feedback loops",
+                                                       "imposter syndrome risk"], ... },
+    "QA Engineer":               { primary_concerns: ["coverage", "regression detection",
+                                                       "release confidence"], ... },
+}
+```
+
+### Fallback insight format
+
+Если ShadoClaw 503/529 — backend возвращает **template-based** insight без LLM:
+
+```json
+{
+  "person_id": "ivan",
+  "generated_at": "2026-04-25T10:00:00Z",
+  "model": "fallback-template",   // явно помечен
+  "cached": false,
+  "fallback": true,
+  "insights": [
+    "Night commits 100%, fix-revert 100%, isolation 1.0 — solo firefighting pattern.",
+    "Bus factor 0.67 + isolation = critical knowledge concentration risk.",
+    "Tone score dropped from 0.60 to -0.70 (90 days) — frustration trend visible."
+  ],
+  "actions": [
+    "Schedule 1:1 within 48h to discuss workload and incident pattern.",
+    "Pair second engineer onto veins-core to reduce bus factor.",
+    "Audit fix-revert ratio root cause (testing infra? rushed deadlines?)."
+  ]
+}
+```
+
+Frontend показывает badge "⚡ template" вместо "✨ AI" когда `fallback=true`.
+
+### Smart cache (partial invalidation)
+
+Существующий `llm_cache` (по `prompt_hash`) дополняется таблицей:
+
+```sql
+CREATE TABLE IF NOT EXISTS signal_snapshots (
+    person_id TEXT NOT NULL,
+    signals_json TEXT NOT NULL,    -- JSON {"night_commits": 1.0, "fix_revert": 1.0, ...}
+    insight_id INTEGER,            -- FK to llm_cache.rowid
+    created_at TEXT NOT NULL
+);
+```
+
+Логика:
+1. При запросе `/insights/{person}` → считаем current signals
+2. Ищем последний `signal_snapshot` для person
+3. Если все ключевые signals не отличаются больше чем на **0.10** — возвращаем cached insight по `insight_id`
+4. Иначе — новый LLM call, обновляем snapshot
+
+Это решает проблему: после `POST /ingest/event` signal hash меняется, prompt_hash тоже, кэш miss → 8 сек на LLM. С smart cache: ingest 1 коммита Ивана = signals дёрнулись на 0.03 → кэш hit, мгновенно.
+
+### Embeddings + RAG pipeline (Agent P)
+
+**Pipeline summary→embed→retrieve→inject:**
+
+1. **Summarize** (Sonnet, cached): каждый chunk событий (5-10 events) → 50-token summary
+2. **Embed** (Qwen3-Embedding-8B через OpenRouter): summary → 4096-dim vector
+3. **Store** в SQLite blob (`embeddings` table)
+4. **Retrieve** (numpy cosine similarity): запрос "burnout signals for {person}" → top-K=8 chunks
+5. **Inject** в `context.retrieved_chunks` → Opus prompt
+
+**Chunk strategy:**
+- Группировать events по неделям per person → ~12 chunks per person × 7 people = 84 chunks
+- Каждый chunk = краткое описание недели + ключевые events
+- Re-embed только при `events_diff > 5` за неделю (smart invalidation)
+
+**OpenRouter API:**
+```python
+# .env: OPENROUTER_API_KEY=sk-or-v1-...
+import httpx
+
+async def embed_text(text: str) -> list[float]:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://openrouter.ai/api/v1/embeddings",
+            headers={"Authorization": f"Bearer {settings.openrouter_api_key}",
+                     "HTTP-Referer": "https://github.com/bormotun44ik/Veins-Hack"},
+            json={"model": "qwen/qwen3-embedding-8b", "input": text}
+        )
+        return r.json()["data"][0]["embedding"]
+```
+
+Schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS embeddings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id TEXT NOT NULL,
+    chunk_kind TEXT NOT NULL,         -- 'weekly_summary' | 'event_burst'
+    chunk_period TEXT,                -- '2026-W14' для weekly
+    text TEXT NOT NULL,               -- summary text (~50 tokens)
+    embedding BLOB NOT NULL,          -- numpy.float32 array, 4096 dims
+    source_event_ids TEXT,            -- JSON list of events.id
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_emb_person ON embeddings(person_id);
+```
+
+### Phase 3 endpoints
+
+#### `GET /insights/{id}?include_chunks=true`
+Старый endpoint, новый optional query param. Если `true` — в response добавляется `retrieved_chunks` (берётся из RAG).
+
+#### `POST /trickle/start` *(опц., Agent M)*
+```json
+← Body: { "scenario": "ivan-burns-out" | null, "rate_seconds": 10, "duration_seconds": 600 }
+→ 202 Accepted: { "trickle_id": "uuid", "status": "running", "events_planned": 60 }
+```
+
+#### `POST /trickle/stop`
+```json
+→ 200: { "trickle_id": "uuid", "events_pushed": 47, "stopped_at": "..." }
+```
+
+Trickle process работает внутри backend (asyncio task) или как отдельный CLI script — Agent M сам выбирает.
+
+---
+
 ## Как агенты используют контракты
 
+### Phase 1 (A-F)
 - **Agent A** читает §SQLite, §Event, §Environment → реализует ingest + db.py
 - **Agent B** читает §Signal contract, работает против `data/samples/sample_events.jsonl`
 - **Agent C** читает §Graph, §API → реализует graph + FastAPI routes, работает против sample_events
 - **Agent D** читает §LLM, §Cache, §API (insights/action) → работает против `sample_graph.json`
 - **Agent E** читает §API + `sample_graph.json` + `sample_insight.json` → пишет UI
 - **Agent F** читает весь файл → генерит `data/samples/*` и `seed_demo.py`
+
+### Phase 2 (H-K)
+- **Agent H** читает §GET /dashboard → реализует backend dashboard
+- **Agent I** читает §GET /dashboard + §App.tsx refactor → пишет Dashboard UI
+- **Agent J** читает §POST /ingest/event → реализует live ingest backend
+- **Agent K** читает §POST /ingest/event → пишет push_event CLI
+
+### Phase 3 (L-P)
+- **Agent L** читает §Team roster + §Trend dataset → расширяет mocks (7 людей + 3 мес history)
+- **Agent M** читает §Trickle generator + §POST /trickle/* → пишет trickle.py + scenarios
+- **Agent N** читает §Trend & peer-aware insights + §Role focus → context_v2 + prompts_v2
+- **Agent O** читает §Fallback insight + §Smart cache → fallback.py + smart_cache.py
+- **Agent P** читает §Embeddings + RAG pipeline → embedder + retrieval + summarizer
 
 **Правило:** если агенту нужно изменение контракта — **пишет PR в CONTRACTS.md** с комментарием "proposed by agent X", orchestrator апрувит или отклоняет.
