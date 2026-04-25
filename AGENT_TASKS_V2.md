@@ -149,7 +149,14 @@ worktree: ../veins-agent-h
                    'isolated night-firefighter', 'overwhelmed tech lead',
                    'collaborative steady builder'. Return ONLY the phrase, no quotes."
          user = "Person: {name}. Signals: night={n}, fix_revert={f}, isolation={i}, ..."
-         Cache в llm_cache как обычно (используй существующий llm.client.ask).
+
+         ОБЯЗАТЕЛЬНО кэшируй (без кэша на каждый dashboard reload — N LLM calls).
+         Используй существующий llm.client.ask(model="sonnet", ..., cache_key=...).
+         cache_key должен зависеть от инсайта чтобы инвалидироваться при изменении:
+           insight_hash = sha256(top_insight)[:16]
+           cache_key = f"primary_reason:{person_id}:{insight_hash}"
+         Если top_insight пуст (cache miss выше) — primary_reason тоже пропускаем,
+         возвращаем "" (frontend скроет строку).
 
    def get_shoutouts(conn) -> list[dict]
      SELECT id, name, role, avatar_url, overload_score FROM people
@@ -158,21 +165,31 @@ worktree: ../veins-agent-h
    def get_heatmap(conn) -> dict
      Для каждого person — values 7 сигналов.
      ВАЖНО: НЕ зови tone_delta заново (slow LLM). Возьми кэшированное значение
-     из people.metadata_json если оно там есть, иначе 0.5.
+     из people.metadata_json если оно там есть, иначе **0.0** (НЕ 0.5).
+     Объяснение: 0.5 = "neutral sentiment по сигмоиду" — информативное значение.
+     Если данных нет — мы не знаем нейтрально или нет, показываем 0.0 ("нет данных")
+     чтобы heatmap-ячейка была прозрачной (visual cue), а не вводила в заблуждение.
      Остальные 6 сигналов — call signals.<name>.compute(pid, conn) (cheap, no LLM).
 
 2. dashboard/api.py:
    from fastapi import APIRouter
    router = APIRouter()
 
+   # ОБЯЗАТЕЛЬНО async — внутри get_attention есть await ask(...) для primary_reason.
+   # НЕ ИСПОЛЬЗУЙ asyncio.get_event_loop().run_until_complete() — упадёт в FastAPI
+   # event loop (это уже было в Phase 1 с tone_delta, чинили через ThreadPoolExecutor;
+   # здесь правильно — просто async/await до самого верха).
    @router.get("/dashboard")
-   def get_dashboard():
+   async def get_dashboard():
      from app.db import get_connection
      from datetime import datetime, timezone
      conn = get_connection()
+     # Aggregator-функции что используют await ask() — тоже async.
+     # get_summary / get_shoutouts / get_heatmap — sync (нет LLM вызовов).
+     # get_attention — async (зовёт Sonnet для primary_reason).
      return {
        "summary":   get_summary(conn),
-       "attention": get_attention(conn),
+       "attention": await get_attention(conn),
        "shoutouts": get_shoutouts(conn),
        "heatmap":   get_heatmap(conn),
        "generated_at": datetime.now(timezone.utc).isoformat(),
