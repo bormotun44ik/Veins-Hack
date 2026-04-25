@@ -267,7 +267,20 @@ worktree: ../veins-agent-i
 
 И ИЗМЕНЕНИЯ (минимум) в существующих:
   frontend/src/types.ts            — добавить DashboardResponse + типы
-  frontend/src/api.ts              — добавить fetchDashboard()
+                                     ИСТОЧНИК ИСТИНЫ для типов — CONTRACTS.md §GET /dashboard.
+                                     Типы в types.ts должны точно зеркалить контракт.
+                                     Не выдумывай имена полей — бери из CONTRACTS дословно.
+  frontend/src/api.ts              — добавить fetchDashboard():
+                                     ```ts
+                                     const IS_MOCK = import.meta.env.VITE_MOCK === "true"
+                                     export async function fetchDashboard(signal?: AbortSignal): Promise<DashboardResponse> {
+                                       const url = IS_MOCK ? "/samples/sample_dashboard.json" : "/dashboard"
+                                       const res = await fetch(url, { signal })
+                                       if (!res.ok) throw new Error(`dashboard ${res.status}`)
+                                       return res.json()
+                                     }
+                                     ```
+                                     Используй тот же IS_MOCK pattern что в Phase 1 api.ts.
   frontend/src/App.tsx             — рефакторинг: вынести существующий graph-layout
                                      в GraphPage.tsx, App.tsx становится тонким switcher
 
@@ -365,7 +378,9 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
          }
 
          tick()  // immediate
-         timer = setInterval(tick, 10000)
+         timer = setInterval(() => {
+           if (!document.hidden) tick()  // pause polling when tab hidden (Page Visibility API)
+         }, 10000)
 
          return () => { clearInterval(timer); ctrl.abort() }
        }, [])
@@ -373,6 +388,12 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
    - useState<DashboardResponse | null>
    - Loading: skeleton с animation pulse (см. DESIGN.md §CSS Animations).
      Используй `.animate-pulse` Tailwind class на placeholder-divах.
+     Размеры skeleton должны приближённо соответствовать реальным компонентам:
+       AttentionCard skeleton: h-24 w-full rounded
+       ShoutoutCard skeleton: h-20 w-28 rounded
+       HeatmapMatrix skeleton: h-32 w-full rounded
+   - ОБЯЗАТЕЛЬНО key={item.person_id} на всех .map() в JSX — без этого React warnings
+     в console (жюри видят DevTools).
    - props: onSelectPerson(id) — для перехода в graph view
 
 2. AttentionCard.tsx
@@ -387,7 +408,11 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
    - Маленькая карточка-кубик, avatar + name + overload%, кнопка Recognition
    - Recognition button вызывает api.postRecognition(id) НАПРЯМУЮ.
      НЕ переиспользуй ActionButtons.tsx (он остаётся в InsightPanel sidebar).
-     Свой локальный обработчик: setLoading → fetch → показать modal или toast с текстом.
+     Свой локальный обработчик — inline success state (не modal, не alert):
+       const [sent, setSent] = useState(false)
+       onClick: setSent(false) → await postRecognition(id) → setSent(true) → setTimeout(() => setSent(false), 2000)
+       Кнопка рендерит: sent ? "✓ Sent" : "Recognition"
+     Это чище и быстрее чем modal на демо.
 
 4. HeatmapMatrix.tsx
    - props: heatmap data
@@ -397,7 +422,9 @@ LAYOUT (см. DESIGN.md за цветами/типографикой):
                           : value > 0.4 ? var(--status-yellow)
                           : value > 0.1 ? var(--accent-dim)
                           : transparent`
-   - Заголовки колонок: моноширинный xs
+   - Заголовки колонок: моноширинный xs (сокращения: night, fix, tone, lag, bus, iso, wknd)
+   - Заголовки строк: имена людей (person.name или person_id) слева от ячеек, моноширинный xs,
+     фиксированная ширина ~64px чтобы сетка не плыла
 
 5. ViewToggle.tsx
    - Segmented control. ВНИМАНИЕ: рендерится в App.tsx header **слева** (рядом с
