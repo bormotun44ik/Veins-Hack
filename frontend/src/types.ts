@@ -81,3 +81,56 @@ export interface RecognitionResponse {
   person_id: string
   text: string
 }
+
+// Dashboard types — mirror of CONTRACTS.md §GET /dashboard
+
+export interface DashboardSummaryPeak {
+  person_id: string
+  overload_score: number
+}
+
+export interface DashboardSummary {
+  red_count: number
+  yellow_count: number
+  green_count: number
+  avg_overload: number
+  peak: DashboardSummaryPeak
+}
+
+export interface AttentionPerson {
+  person_id: string
+  name: string
+  role: string
+  avatar_url: string
+  status: NodeStatus
+  overload_score: number
+  top_insight: string
+  top_action: string
+  primary_reason: string
+}
+
+export interface ShoutoutPerson {
+  person_id: string
+  name: string
+  role: string
+  avatar_url: string
+  overload_score: number
+}
+
+export interface HeatmapSignals {
+  night_commits_ratio: number
+  fix_revert_ratio: number
+  commit_tone_delta: number
+  pr_review_lag_hours: number
+  bus_factor: number
+  co_author_isolation: number
+  weekend_activity: number
+}
+
+export interface DashboardResponse {
+  summary: DashboardSummary
+  attention: AttentionPerson[]
+  shoutouts: ShoutoutPerson[]
+  heatmap: Record<string, HeatmapSignals>
+  generated_at: string
+}
