@@ -721,9 +721,10 @@ worktree: ../veins-agent-k
 1. scripts/push_event.py:
    - argparse: positional person_id, type, optional message
    - --night → timestamp всегда в "ночь только что прошедшую":
-       now = datetime.now(UTC); today_2am = now.replace(hour=2, minute=47, second=0, microsecond=0)
-       if now < today_2am: today_2am -= timedelta(days=1)  # ещё не дошли до 02:47 сегодня
-       Возвращает today_2am. Это попадает в last 14d окно сигналов всегда.
+       now = datetime.now(UTC); night_ts = now.replace(hour=3, minute=0, second=0, microsecond=0)
+       if now < night_ts: night_ts -= timedelta(days=1)  # ещё не дошли до 03:00 сегодня
+       Возвращает night_ts. Попадает в last 14d окно сигналов всегда.
+       hour=3 minute=0 — round number, читается как "3am commit" (инженерный мем).
    - --weekend → последняя прошедшая суббота 14:00 UTC
    - default → timestamp = now (UTC ISO8601)
    - Для type='commit' автоматически генерит payload:
@@ -733,14 +734,34 @@ worktree: ../veins-agent-k
    - Для type='slack_msg' payload = {"channel":"team-general", "text": <message>,
                                        "reply_to": null, "thread_root": null,
                                        "mentions": [], "sentiment": null}
+   - ПЕРЕД POST — сделать GET /person/{person_id} чтобы показать стартовый контекст:
+       Ivan Petrov (senior-backend) — current overload: 0.78 🔴 RED
+       Pushing commit event...
+     Это даёт жюри точку отсчёта до демо-эффекта.
+     Используй тот же urllib.request + timeout=5.
+
    - POST через urllib.request (без http клиентов, чтобы не тащить deps)
+   - ОБЯЗАТЕЛЬНО timeout=5 на все urllib.request.urlopen вызовы.
+     Без timeout — при зависшем backend скрипт висит вечно. На демо = catastrophic.
+   - ОБЯЗАТЕЛЬНО обернуть urlopen в try/except:
+       try:
+           with urllib.request.urlopen(req, timeout=5) as resp:
+               data = json.loads(resp.read())
+       except urllib.error.URLError as e:
+           print(f"❌ Backend unavailable: {e.reason}")
+           print(f"   Is 'docker compose up' running? (http://127.0.0.1:8000)")
+           sys.exit(1)
+       except TimeoutError:
+           print("❌ Request timed out (5s). Backend may be overloaded.")
+           sys.exit(1)
    - Pretty print результата с цветами (если sys.stdout.isatty()):
        🚀 ✅ → ANSI green/yellow/red по статусу
-   - При ошибке от backend печатать дружелюбно. Например 404:
+   - При HTTP ошибках от backend (4xx/5xx):
        ❌ Error 404: person 'nobody' not found.
        Available people: ivan, maria, tom, anna, peter
-       (список бери из data/fake_team.json или зашитый константой)
+       (список зашитый константой или из data/fake_team.json)
      При 400 BAD_EVENT: показать текст message от backend как есть.
+     При 422 (Pydantic validation): показать detail[0].msg.
 
 2. scripts/demo_replay.sh (опционально):
    #!/usr/bin/env bash
@@ -749,12 +770,12 @@ worktree: ../veins-agent-k
    # 5 сек на graph). Иначе 2 события объединятся в одно визуальное
    # обновление и WOW-эффект пропадёт.
    set -e
-   echo "Press Enter to push event 1: Ivan night commit"
-   read
+   echo "Press Enter to push event 1: Ivan night commit (or wait 30s)"
+   read -t 30 || true  # -t 30 timeout — автопродолжение если забыл нажать Enter
    python scripts/push_event.py ivan commit "fix: revert broke prod again" --night
    sleep 12  # подождём что polling успел показать обновление
-   echo "Press Enter to push event 2: Ivan slack at 3am"
-   read
+   echo "Press Enter to push event 2: Ivan slack at 3am (or wait 30s)"
+   read -t 30 || true
    python scripts/push_event.py ivan slack_msg "не успею, всё ломается"
    sleep 12
    ...
