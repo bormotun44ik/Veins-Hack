@@ -343,6 +343,98 @@ Query params: `layer` ∈ `{"stress", "collab", "workload"}`, default `"stress"`
 }
 ```
 
+### `GET /dashboard` *(phase 2 — Agent H)*
+
+Manager overview — single screen, всё что нужно для "ситуация команды за 3 секунды".
+
+```json
+→ 200
+{
+  "summary": {
+    "red_count": 1,
+    "yellow_count": 0,
+    "green_count": 4,
+    "avg_overload": 0.39,
+    "peak": { "person_id": "ivan", "overload_score": 0.78 }
+  },
+  "attention": [
+    {
+      "person_id": "ivan",
+      "name": "Ivan Petrov",
+      "role": "Senior Backend Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=ivan",
+      "status": "red",
+      "overload_score": 0.78,
+      "top_insight": "100% night commits + 100% fix/revert ratio + full co-author isolation = solo-firefighting production at night.",
+      "top_action": "Schedule 1:1 this week, pair second engineer onto veins-core to break isolation.",
+      "primary_reason": "isolated night-firefighter"
+    }
+  ],
+  "shoutouts": [
+    { "person_id": "peter", "name": "Peter Dimitrov", "role": "QA Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=peter", "overload_score": 0.20 },
+    { "person_id": "anna",  "name": "Anna Kowalska",  "role": "Frontend Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=anna",  "overload_score": 0.26 },
+    { "person_id": "maria", "name": "Maria Ivanova",  "role": "Tech Lead",
+      "avatar_url": "https://i.pravatar.cc/150?u=maria", "overload_score": 0.34 }
+  ],
+  "heatmap": {
+    "ivan": {
+      "night_commits_ratio": 1.0, "fix_revert_ratio": 1.0, "commit_tone_delta": 0.5,
+      "pr_review_lag_hours": 0.75, "bus_factor": 0.67, "co_author_isolation": 1.0,
+      "weekend_activity": 0.40
+    },
+    "maria": { "...": "...same shape per person" }
+  },
+  "generated_at": "2026-04-25T08:00:00Z"
+}
+```
+
+**Правила Agent H:**
+- `attention` — все red + yellow, отсортированы по overload убыванию.
+- `shoutouts` — top 3 green с наименьшим overload. Если зелёных < 3 — берёт что есть.
+- `top_insight` / `top_action` — первый элемент из cached `/insights/{person_id}`. Если кэша нет → endpoint **не зовёт live LLM** (демо-критично, не тормозить), вместо этого возвращает строку `"Cache warm-up needed — run scripts/prewarm_cache.py"`.
+- `primary_reason` — короткая подпись (3-4 слова), генерируется через Sonnet 1 раз и кешируется в `llm_cache` под key `dashboard_reason:{person_id}:{insight_hash}`.
+
+### `POST /ingest/event` *(phase 2 — Agent J)*
+
+Live data append — для демо-сценария "Иван закоммитил прямо сейчас".
+
+```json
+← Body
+{
+  "person_id": "ivan",
+  "type": "commit",                     // commit | slack_msg | meeting_attended | task_update | review | pr
+  "timestamp": "2026-04-25T02:47:00Z",  // optional, default = now
+  "payload": {                          // type-specific (см. Event schema)
+    "sha": "deadbee",
+    "message": "fix: revert broke prod again",
+    "repo_id": "veins-core",
+    "branch": "main",
+    "co_authors": [],
+    "files_touched": ["src/auth.py"]
+  }
+}
+
+→ 200
+{
+  "person_id": "ivan",
+  "event_id": 51,
+  "old_overload_score": 0.78,
+  "new_overload_score": 0.83,
+  "old_status": "red",
+  "new_status": "red",
+  "recomputed_signals": ["night_commits_ratio", "fix_revert_ratio"]
+}
+```
+
+**Правила Agent J:**
+- INSERT в events
+- Дёргает `composite.compute_overload(person_id)` — **БЕЗ tone_delta** (slow LLM call), только дешёвые сигналы. tone_delta пересчитываем не чаще раз в 5 минут (cooldown).
+- UPDATE people SET overload_score
+- Возвращает diff чтобы frontend мог анимировать изменение
+- Не валидирует payload против Event schema на этом этапе (trust caller для демо)
+
 ### Error responses
 
 Все ошибки — формат `{ "error": { "code": "STRING", "message": "human readable" } }`
@@ -350,7 +442,8 @@ Query params: `layer` ∈ `{"stress", "collab", "workload"}`, default `"stress"`
 | HTTP | code | when |
 |---|---|---|
 | 400 | `BAD_LAYER` | invalid `?layer=` value |
-| 404 | `PERSON_NOT_FOUND` | `/person/{id}` с несуществующим id |
+| 400 | `BAD_EVENT` | `POST /ingest/event` с invalid type или missing person_id |
+| 404 | `PERSON_NOT_FOUND` | `/person/{id}` или `/ingest/event` с несуществующим person_id |
 | 503 | `LLM_UNAVAILABLE` | ShadoClaw недоступен И кэша нет |
 | 500 | `INTERNAL_ERROR` | всё остальное |
 
