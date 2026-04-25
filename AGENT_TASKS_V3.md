@@ -290,12 +290,56 @@ PYTHON BEST PRACTICES:
   • argparse для --fresh, --skip-historical
   • json.load с try/except для defensive чтения файлов
   • print с emoji для read статуса (как в seed_demo.py)
+  • --fresh означает: DELETE FROM events, people, historical_signals — полная очистка данных
+    (не drop таблиц, не пересоздание схемы — только данные)
 
 ОГРАНИЧЕНИЯ:
-  • Не трогай backend/, frontend/, scripts/ кроме seed_demo_v2.py.
-  • Не меняй существующий seed_demo.py — пометь его # DEPRECATED: see seed_demo_v2.py
+  • Не трогай backend/, frontend/, scripts/ кроме seed_demo_v2.py и seed_demo.py (shim).
   • mock-данные должны быть НА АНГЛИЙСКОМ для Slack/Jira (Claude генерит insights на eng).
     Исключение: Ivan slack_msgs могут быть на русском (демо-нарратив "не успею к утру").
+
+SEED_DEMO.PY — SHIM (обязательно):
+  После создания seed_demo_v2.py — перепиши seed_demo.py как shim:
+  ```python
+  # scripts/seed_demo.py
+  """DEPRECATED: используется только для backward-compat с docker-compose.
+  Реальная логика в seed_demo_v2.py.
+  """
+  import sys
+  from seed_demo_v2 import main as v2_main
+
+  if __name__ == "__main__":
+      print("⚠️  seed_demo.py is deprecated, delegating to seed_demo_v2.py")
+      sys.exit(v2_main())
+  ```
+  Это критично — docker-compose вызывает seed_demo.py, без shim при --build запустится
+  старый seed (5 людей вместо 7).
+
+EMAIL_TO_ID ПРАВКА — ОТДЕЛЬНЫЙ КОММИТ:
+  Изменение в backend/app/ingest/github.py (EMAIL_TO_ID маппинг) — оформить отдельным
+  коммитом с сообщением: "l: update EMAIL_TO_ID mapping (add marina, nikita)"
+  Это нарушение зоны, изолируй от остального кода — иначе merge будет грязный.
+
+DATA VALIDATION в seed_demo_v2.py:
+  После загрузки каждого JSON файла — добавь assertions:
+  ```python
+  team = json.load(f)
+  assert len(team) == 7, f"Expected 7 people, got {len(team)}"
+
+  hist = json.load(f)
+  people_ids = {p["id"] for p in team}
+  hist_ids = {entry["person_id"] for entry in hist}
+  assert hist_ids == people_ids, f"historical_signals missing people: {people_ids - hist_ids}"
+  ```
+  Без этого Agent N получит пустой context и упадёт молча.
+
+HISTORICAL_SIGNALS — ЯВНАЯ ОЧИСТКА:
+  В seed_demo_v2.py перед INSERT в historical_signals — всегда делай:
+  ```python
+  conn.execute("DELETE FROM historical_signals WHERE 1=1")
+  ```
+  (даже если --fresh не передан). Таблица могла остаться со старой схемой после Phase 2,
+  и INSERT OR REPLACE не поможет если PRIMARY KEY поменялся.
 
 DoD:
   1. python scripts/seed_demo_v2.py --fresh → "Seeded ~200 events, 7 people, 84 historical_signals"
@@ -304,11 +348,13 @@ DoD:
   4. cat data/transcripts/*.json | jq . → 3 валидных транскрипта
   5. Ivan overload >= 0.75 после полного seed (проверь composite.compute_overload('ivan'))
   6. Marina overload >= 0.55 после полного seed
+  7. python -c "import json; d=json.load(open('data/historical_signals.json')); assert len(d)==7" → OK
+  8. python scripts/seed_demo.py --fresh → "⚠️ seed_demo.py is deprecated..." затем выполняет v2
 
 ОТЧЁТ:
   DONE:     ...
   BLOCKED:  ...
-  CHANGED:  только указанные файлы
+  CHANGED:  только указанные файлы + backend/app/ingest/github.py (EMAIL_TO_ID, отдельный коммит)
   NEXT:     передай orchestrator'у — нужен seed на новых данных + rebuild
 ```
 
