@@ -60,11 +60,15 @@ async def post_recognition(person_id: str):
     from app.rag.context import build_person_context
     from app.llm.client import ask
     from app.llm.prompts import RECOGNITION_SYSTEM, recognition_user_prompt
+    from app.llm.cache import make_prompt_hash
 
     conn = get_connection()
     ctx = build_person_context(person_id, conn)
     if not ctx:
         raise PersonNotFound(person_id)
 
-    text = await ask("sonnet", RECOGNITION_SYSTEM, recognition_user_prompt(ctx))
+    user = recognition_user_prompt(ctx)
+    # cache_key = prompt_hash чтобы повторные клики на демо были мгновенные
+    cache_key = make_prompt_hash(RECOGNITION_SYSTEM, user, "sonnet")
+    text = await ask("sonnet", RECOGNITION_SYSTEM, user, cache_key=cache_key)
     return {"person_id": person_id, "text": text}

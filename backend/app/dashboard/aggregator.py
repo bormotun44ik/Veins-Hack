@@ -19,10 +19,50 @@ SIGNAL_KEYS = [
 ]
 
 PRIMARY_REASON_SYSTEM = (
-    "Summarize a person's burnout pattern in 3-4 words. "
-    "Examples: 'isolated night-firefighter', 'overwhelmed tech lead', "
-    "'collaborative steady builder'. Return ONLY the phrase, no quotes."
+    "You output ONE short phrase of 3-4 words describing a person's burnout pattern.\n"
+    "\n"
+    "CRITICAL RULES:\n"
+    "- Output exactly one line with 3-4 words, lowercase.\n"
+    "- No markdown, no headings, no tables, no emojis, no bullets.\n"
+    "- No quotes around the phrase. No explanation. No analysis.\n"
+    "- Maximum 40 characters total.\n"
+    "\n"
+    "Examples of CORRECT output:\n"
+    "  isolated night-firefighter\n"
+    "  overwhelmed tech lead\n"
+    "  collaborative steady builder\n"
+    "  weekend solo crusher\n"
+    "\n"
+    "Any output longer than one line is wrong."
 )
+
+
+def _sanitize_primary_reason(raw: str) -> str:
+    """Trim Sonnet's verbose output to first short line. Defends against markdown/lists.
+
+    Rules:
+      - Strip whitespace, quotes, backticks
+      - Take only the first non-empty line
+      - Drop markdown prefixes (#, *, -, >, |)
+      - Cap to 60 chars
+      - If result is empty or contains markdown chars after cleanup → return ""
+    """
+    if not raw:
+        return ""
+    for raw_line in raw.splitlines():
+        line = raw_line.strip().strip("\"'`*_# >|").strip()
+        if not line:
+            continue
+        # Drop common LLM preamble patterns
+        if any(line.lower().startswith(p) for p in ("the ", "this ", "here", "person:", "summary", "analysis", "based on")):
+            continue
+        # Drop lines with table separators or markdown
+        if "|" in line or "---" in line or line.startswith(("#", "*", "-")):
+            continue
+        # Looks like a sensible 3-4 word phrase?
+        if 3 <= len(line) <= 60:
+            return line[:60]
+    return ""
 
 
 def _status(score: float) -> str:
@@ -89,32 +129,54 @@ def _get_cached_insight(person_id: str, conn: sqlite3.Connection) -> tuple[str, 
         return "", ""
 
 
+def _heuristic_reason(sigs: dict) -> str:
+    """Deterministic 3-4 word phrase from signal pattern.
+
+    Sonnet/Opus reliably ignore 'short phrase' instructions and dump markdown
+    analysis (verified empirically). Heuristic over signals is faster, free,
+    and predictable for the demo.
+    """
+    night = sigs.get("night_commits_ratio", 0)
+    fix = sigs.get("fix_revert_ratio", 0)
+    isolation = sigs.get("co_author_isolation", 0)
+    bus = sigs.get("bus_factor", 0)
+    weekend = sigs.get("weekend_activity", 0)
+    pr_lag = sigs.get("pr_review_lag_hours", 0)
+
+    # High-priority composite patterns first
+    if night > 0.5 and fix > 0.5 and isolation > 0.5:
+        return "isolated night-firefighter"
+    if bus > 0.7 and isolation > 0.5:
+        return "bus-factor critical"
+    if night > 0.5 and weekend > 0.3:
+        return "always-on burnout"
+    if fix > 0.5 and pr_lag > 0.5:
+        return "blocked firefighter"
+    if isolation > 0.7:
+        return "fully isolated worker"
+    if night > 0.5:
+        return "night-shift coder"
+    if fix > 0.5:
+        return "stuck in firefighting"
+    if weekend > 0.4:
+        return "weekend grinder"
+    if pr_lag > 0.5:
+        return "review bottleneck"
+    return "elevated load"
+
+
 async def _compute_primary_reason(person: dict, top_insight: str, conn: sqlite3.Connection) -> str:
-    """Generate/cache 3-4 word burnout pattern for person."""
+    """3-4 word burnout pattern. Uses deterministic heuristic over signals.
+
+    Was: LLM call to Sonnet. Sonnet ignored 'short phrase' instruction and
+    returned 2KB markdown analysis. Heuristic is more reliable.
+    """
     if not top_insight:
         return ""
     try:
-        from app.llm.client import ask
-        from app.llm.prompts import insight_user_prompt
         from app.rag.context import build_person_context
-
-        insight_hash = hashlib.sha256(top_insight.encode()).hexdigest()[:16]
-        cache_key = f"primary_reason:{person['person_id']}:{insight_hash}"
-
         ctx = build_person_context(person["person_id"], conn)
-        sigs = ctx.get("signals", {})
-
-        user_msg = (
-            f"Person: {person['name']}. "
-            f"Signals: night={sigs.get('night_commits_ratio', 0):.2f}, "
-            f"fix_revert={sigs.get('fix_revert_ratio', 0):.2f}, "
-            f"isolation={sigs.get('co_author_isolation', 0):.2f}, "
-            f"bus_factor={sigs.get('bus_factor', 0):.2f}, "
-            f"weekend={sigs.get('weekend_activity', 0):.2f}"
-        )
-
-        reason = await ask("sonnet", PRIMARY_REASON_SYSTEM, user_msg, cache_key=cache_key)
-        return reason.strip().strip('"').strip("'")
+        return _heuristic_reason(ctx.get("signals", {}))
     except Exception as e:
         logger.error(f"compute_primary_reason for {person.get('person_id')}: {e}")
         return ""

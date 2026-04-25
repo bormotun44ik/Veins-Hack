@@ -28,15 +28,25 @@ ROOT = Path(__file__).parent.parent
 DB_PATH = os.environ.get("DATABASE_PATH", str(ROOT / "db" / "veins.db"))
 
 
-def hit(url: str, method: str = "GET", timeout: int = 30) -> tuple[int, str]:
-    req = Request(url, method=method)
-    try:
-        with urlopen(req, timeout=timeout) as resp:
-            return resp.status, resp.read().decode("utf-8", errors="replace")
-    except HTTPError as e:
-        return e.code, e.read().decode("utf-8", errors="replace")
-    except URLError as e:
-        return 0, f"URLError: {e.reason}"
+def hit(url: str, method: str = "GET", timeout: int = 30, retries: int = 3, backoff: int = 8) -> tuple[int, str]:
+    """HTTP call with retry on 503/529 (Anthropic overloaded)."""
+    for attempt in range(retries):
+        req = Request(url, method=method)
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="replace")
+        except HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            # Retry on transient upstream errors
+            if e.code in (503, 529) and attempt < retries - 1:
+                wait = backoff * (attempt + 1)
+                print(f"    ⏳ retry in {wait}s (HTTP {e.code} — Anthropic flaky)")
+                time.sleep(wait)
+                continue
+            return e.code, body
+        except URLError as e:
+            return 0, f"URLError: {e.reason}"
+    return 0, "max retries exhausted"
 
 
 def list_people() -> list[str]:
@@ -86,6 +96,18 @@ def main() -> int:
             print(f"  ✅ /action/recognition/{pid}    ({dt:.1f}s)")
         else:
             print(f"  ❌ /action/recognition/{pid} → HTTP {status}  body[:120]: {body[:120]}")
+
+    # Warm dashboard endpoint — это прогревает primary_reason cache
+    # (хотя сейчас primary_reason heuristic, не LLM, но зато готовый ответ кешируется
+    # на случай что Agent I делает polling каждые 10 сек)
+    print()
+    t0 = time.time()
+    status, body = hit(f"{BASE}/dashboard", timeout=30)
+    dt = time.time() - t0
+    if status == 200:
+        print(f"  ✅ /dashboard                  ({dt:.1f}s)")
+    else:
+        print(f"  ❌ /dashboard → HTTP {status}  body[:120]: {body[:120]}")
 
     print()
     print(f"✅ Done. Final cache size: {cache_stats()} entries")

@@ -15,7 +15,28 @@ export default function GraphPage({ selectedId, setSelectedId }: GraphPageProps)
   const [graphData, setGraphData] = useState<GraphResponse | null>(null)
 
   useEffect(() => {
-    fetchGraph(layer).then(setGraphData).catch(console.error)
+    // Polling 5s: при live ingest новые события появятся автоматом без F5.
+    // Pause when tab hidden — экономим LLM-кэш-lookups и сеть.
+    const ctrl = new AbortController()
+    let timer: number | undefined
+
+    const tick = async () => {
+      if (document.hidden) return
+      try {
+        const data = await fetchGraph(layer)
+        if (!ctrl.signal.aborted) setGraphData(data)
+      } catch (e) {
+        if (!ctrl.signal.aborted) console.error('graph poll:', e)
+      }
+    }
+
+    tick()  // immediate
+    timer = window.setInterval(tick, 5000)
+
+    return () => {
+      ctrl.abort()
+      if (timer !== undefined) window.clearInterval(timer)
+    }
   }, [layer])
 
   return (
