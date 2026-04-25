@@ -158,6 +158,14 @@ worktree: ../veins-agent-h
          Если top_insight пуст (cache miss выше) — primary_reason тоже пропускаем,
          возвращаем "" (frontend скроет строку).
 
+   ВАЖНО: если в attention несколько человек — compute primary_reason параллельно:
+     Вынеси логику в отдельную:
+       async def compute_primary_reason(person: dict, conn) -> str
+     Затем в get_attention:
+       tasks = [compute_primary_reason(p, conn) for p in attention_people]
+       reasons = await asyncio.gather(*tasks)
+     Последовательно = N×2s cold cache latency → с gather = 2s независимо от N.
+
    def get_shoutouts(conn) -> list[dict]
      SELECT id, name, role, avatar_url, overload_score FROM people
        WHERE overload_score < 0.4 ORDER BY overload_score ASC LIMIT 3
@@ -173,13 +181,25 @@ worktree: ../veins-agent-h
 
 2. dashboard/api.py:
    from fastapi import APIRouter
+   from pydantic import BaseModel
+   from typing import Any
    router = APIRouter()
+
+   # Минимальный response_model — top-level структура, nested как dict/list[dict].
+   # Цель: FastAPI генерит OpenAPI schema + валидирует top-level поля.
+   # НЕ городи глубокую Pydantic иерархию — это MVP.
+   class DashboardResponse(BaseModel):
+       summary: dict[str, Any]
+       attention: list[dict[str, Any]]
+       shoutouts: list[dict[str, Any]]
+       heatmap: dict[str, dict[str, float]]
+       generated_at: str
 
    # ОБЯЗАТЕЛЬНО async — внутри get_attention есть await ask(...) для primary_reason.
    # НЕ ИСПОЛЬЗУЙ asyncio.get_event_loop().run_until_complete() — упадёт в FastAPI
    # event loop (это уже было в Phase 1 с tone_delta, чинили через ThreadPoolExecutor;
    # здесь правильно — просто async/await до самого верха).
-   @router.get("/dashboard")
+   @router.get("/dashboard", response_model=DashboardResponse)
    async def get_dashboard():
      from app.db import get_connection
      from datetime import datetime, timezone
