@@ -932,7 +932,11 @@ worktree: ../veins-agent-n
    }
 
    def get_role_focus(role: str) -> dict:
-       return ROLE_FOCUS.get(role, ROLE_FOCUS["Backend Engineer"])  # fallback
+       # Don't lie about role — return empty dict if unknown/empty,
+       # prompt builder will skip role_section entirely (no false context)
+       if not role or role not in ROLE_FOCUS:
+           return {}
+       return ROLE_FOCUS[role]
 
 3. backend/app/rag/context_v2.py:
    import sqlite3, json, logging
@@ -1021,6 +1025,7 @@ worktree: ../veins-agent-n
            "team_median_overload": round(median, 2),
            "person_overload": round(my_overload, 2),
            "rank_in_team": rank,
+           "team_size": len(rows),  # передаём в prompt чтобы не хардкодить 7
        }
        if best:
            result["best_peer"] = {
@@ -1066,9 +1071,9 @@ NEVER make up data. NEVER hallucinate co-workers. Use ONLY data given."""
        chunks = ctx.get("retrieved_chunks", [])
        events = ctx.get("recent_events", [])
 
-       # Build trend section
+       # Build trend section — only include if we have real data (avoid empty section hallucination)
        trend_section = ""
-       if trend:
+       if trend and trend.get("delta_summary"):
            trend_section = f"""
 TREND (3 months ago → now):
   baseline: {trend.get('baseline','')}
@@ -1084,7 +1089,7 @@ PEER COMPARISON:
   Team avg overload: {peer.get('team_avg_overload',0):.2f}
   Team median:       {peer.get('team_median_overload',0):.2f}
   This person:       {peer.get('person_overload',0):.2f}
-  Rank in team:      #{peer.get('rank_in_team','?')} (of {7})
+  Rank in team:      #{peer.get('rank_in_team','?')} (of {peer.get('team_size', len(peer))})
   Best peer (same/similar role): {peer.get('best_peer',{}).get('id','none')}
                        overload {peer.get('best_peer',{}).get('overload',0):.2f}
 """
@@ -1175,14 +1180,27 @@ Respond ONLY with this JSON (no markdown):
   • Build_person_context_v2 НЕ должен делать LLM calls сам по себе (только prompt builder
     использует context).
 
+ДОПОЛНИТЕЛЬНЫЕ ПРАВКИ (обязательно):
+
+get_relevant_chunks() — sync wrapper вызывается из sync context (context_v2.py).
+Используй ТОЛЬКО вариант с ThreadPoolExecutor, убери ветку с asyncio.get_running_loop():
+  ```python
+  import concurrent.futures
+  with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+      query_vec = ex.submit(asyncio.run, embed_text(query)).result()
+  ```
+  Вариант с get_running_loop() — опасен: если вызов идёт внутри event loop FastAPI,
+  asyncio.run() внутри Thread тоже может конфликтовать. Упрощаем до одной ветки.
+
 DoD:
   1. python -c "from app.rag.context_v2 import build_person_context_v2; ..." → возвращает dict
      с полями historical_signals_3m_ago, trend_narrative, peer_comparison, role_focus
-  2. curl /insights/ivan → response содержит insights ссылающиеся на trend ("3 months ago")
-     или peer ("ranks #1") в тексте
+  2. curl /insights/ivan | python3 -c "import json,sys; d=json.load(sys.stdin); assert any('month' in i or 'rank' in i for i in d['insights']), 'No trend/peer mention'"
   3. curl /insights/marina → insights с фокусом Engineering Manager (1:1 quality, team velocity)
   4. curl /insights/nikita → insights с фокусом Junior (growth, safety net)
   5. context_v2 graceful — если historical_signals пустая, не падает
+  6. get_role_focus("") → {} (пустой dict, не "Backend Engineer" fallback)
+  7. get_role_focus("Unknown Role") → {} (аналогично)
 
 ОТЧЁТ.
 ```
@@ -1357,14 +1375,17 @@ worktree: ../veins-agent-o
        return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+   TTL_HOURS = 24  # кэш протухает через 24ч — защита от устаревших insights при долгом простое
+
    def get_cached_insight(person_id: str, current_signals: dict,
                            conn: sqlite3.Connection) -> dict | None:
-       """Возвращает cached insight если signals не изменились существенно."""
+       """Возвращает cached insight если signals не изменились существенно (TTL: 24h)."""
        sig_hash = signals_hash(current_signals)
        row = conn.execute("""
            SELECT insight_response, model, created_at
              FROM signal_snapshots
             WHERE person_id = ? AND signals_hash = ?
+              AND datetime(created_at) > datetime('now', '-24 hours')
             ORDER BY created_at DESC LIMIT 1
        """, (person_id, sig_hash)).fetchone()
        if not row:
@@ -1432,10 +1453,10 @@ worktree: ../veins-agent-o
 
 4. backend/app/llm/api.py — патч /insights endpoint:
    В get_insights():
-       from app.llm.smart_cache import init_smart_cache, get_cached_insight, save_insight_snapshot
+       from app.llm.smart_cache import get_cached_insight, save_insight_snapshot
+       # init_smart_cache вызывается один раз в startup (main.py), не здесь
 
        conn = get_connection()
-       init_smart_cache(conn)  # idempotent
 
        ctx = build_person_context_v2(person_id, conn) or build_person_context(person_id, conn)
        if not ctx:
@@ -1487,12 +1508,10 @@ worktree: ../veins-agent-o
            insights, actions = [], []
 
        fallback_used = False
-       try:
-           # Detect fallback by checking if response was originally JSON we generated
-           if "fallback-template" in raw or len(raw) < 100:
-               fallback_used = True
-       except Exception:
-           pass
+       # fallback_used определяется через исключение от ask(), не через анализ строки
+       # ask() при 5xx либо бросает LLMUnavailable (поймали выше) либо возвращает нормальный текст
+       # Если дошли сюда — LLM отработал, fallback не использовался
+       fallback_used = False
 
        result = {
            "insights": insights, "actions": actions,
@@ -1515,12 +1534,25 @@ worktree: ../veins-agent-o
   • fallback.py НЕ зовёт LLM, только heuristics.
   • smart_cache snapshot — создавай таблицу если её нет (idempotent init_smart_cache).
 
+STARTUP INIT (обязательно):
+  В backend/app/main.py добавь startup event для init_smart_cache:
+  ```python
+  from app.llm.smart_cache import init_smart_cache
+  from app.db import get_connection
+
+  @app.on_event("startup")
+  async def startup():
+      init_smart_cache(get_connection())
+  ```
+  Это убирает CREATE TABLE IF NOT EXISTS из hot path каждого /insights запроса.
+
 DoD:
   1. python -c "from app.llm.fallback import generate_fallback_insight; ..." → 3 insights + 3 actions
   2. curl /insights/ivan → когда ShadoClaw остановлен (test) → response.fallback=true
   3. После first /insights/ivan + cache miss snapshot saved → 2-й запрос (signals не изменились)
      возвращает smart_cached=true мгновенно
   4. После POST /ingest/event с big change (signals jumped >10%) → 3-й запрос → smart_cache miss → новый LLM call
+  5. Snapshot старше 24ч — не возвращается (TTL проверка): создай snapshot с created_at = 25ч назад → get_cached_insight → None
 
 ОТЧЁТ.
 ```
@@ -1602,6 +1634,10 @@ worktree: ../veins-agent-p
                r.raise_for_status()
                data = r.json()
                vec = np.array(data["data"][0]["embedding"], dtype=np.float32)
+               # Dimension validation — защита от model drift (если OpenRouter поменяет модель)
+               if vec.shape[0] != 4096:
+                   logger.warning(f"unexpected embedding dim {vec.shape[0]}, expected 4096 — returning zeros")
+                   return np.zeros(4096, dtype=np.float32)
                return vec
        except Exception as e:
            logger.error(f"embed_text failed: {e}")
@@ -1707,8 +1743,21 @@ Return ONLY the summary text, no JSON, no headers."""
            return "unknown"
 
 
+   _INDEX_BUILDING = False  # guard против параллельного запуска
+
    async def build_index(conn: sqlite3.Connection) -> int:
        """Group events by person × week → summarize → embed → store. Returns count."""
+       global _INDEX_BUILDING
+       if _INDEX_BUILDING:
+           logger.warning("build_index already running, skipping duplicate call")
+           return 0
+       _INDEX_BUILDING = True
+       try:
+           return await _build_index_inner(conn)
+       finally:
+           _INDEX_BUILDING = False
+
+   async def _build_index_inner(conn: sqlite3.Connection) -> int:
        init_embeddings_schema(conn)
 
        # Skip if already populated (idempotent)
@@ -1816,7 +1865,7 @@ Return ONLY the summary text, no JSON, no headers."""
            # Linear scan
            scored = []
            for period, text, blob, src_ids in rows:
-               vec = np.frombuffer(blob, dtype=np.float32)
+               vec = np.frombuffer(blob, dtype=np.float32).copy()  # .copy() — frombuffer возвращает read-only
                score = _cosine(query_vec, vec)
                scored.append({
                    "period": period, "text": text,
@@ -1863,7 +1912,7 @@ Return ONLY the summary text, no JSON, no headers."""
 
 ЗАВИСИМОСТИ:
   • httpx (уже в requirements.txt) — используем для OpenRouter
-  • numpy — добавь в requirements.txt: numpy==2.1.2
+  • numpy==2.1.2 — добавь в backend/requirements.txt (точная версия, не просто "numpy")
   • OPENROUTER_API_KEY должен быть в .env (orchestrator уже добавил)
 
 ОГРАНИЧЕНИЯ:
@@ -1879,11 +1928,14 @@ Return ONLY the summary text, no JSON, no headers."""
     Orchestrator делает это в integration step 8.
 
 DoD:
-  1. python scripts/build_embeddings.py → "Built ~84 chunks" (12 weeks × 7 people)
+  1. python scripts/build_embeddings.py → "Built ~84 chunks" (12 weeks × 7 people, займёт ~2 мин — это нормально)
   2. SELECT COUNT(*) FROM embeddings → > 50
   3. python -c "from app.rag.retrieval import get_relevant_chunks; ..." → top 8 chunks
   4. curl /insights/ivan → response в hot path < 10 sec (retrieval быстрый, embed query 1 sec)
   5. /insights response содержит retrieved_chunks (если context_v2 от Agent N мерджнут)
+  6. embed_text с неправильной размерностью → zeros + warning в лог (не exception)
+  7. python scripts/build_embeddings.py второй раз → "already has N chunks, skipping" (idempotent)
+  8. build_index вызван дважды параллельно → второй вызов → 0 (guard сработал)
 
 ОТЧЁТ.
 ```
