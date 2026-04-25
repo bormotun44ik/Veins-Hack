@@ -1,0 +1,19 @@
+name: "Maria gets promoted"
+description: "Maria demonstrates healthy growth patterns — mentoring, quality code, recognition"
+events:
+  - person: maria
+    type: commit
+    message: "feat: redesign user auth flow — cleaner, safer"
+    delay_sec: 0
+  - person: maria
+    type: slack_msg
+    message: "@anna great job on the dashboard widget, merging now"
+    delay_sec: 10
+  - person: anna
+    type: slack_msg
+    message: "@maria thank you! learned a lot from your review"
+    delay_sec: 18
+  - person: marina
+    type: slack_msg
+    message: "@maria outstanding work this sprint, setting you up for tech lead review"
+    delay_sec: 28

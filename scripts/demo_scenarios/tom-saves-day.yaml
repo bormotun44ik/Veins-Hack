@@ -1,0 +1,19 @@
+name: "Tom saves the day"
+description: "Tom closes Ivan's blocker — unblocks TASK-22, team celebrates"
+events:
+  - person: tom
+    type: commit
+    message: "fix: auth rate limiter bypass — closes TASK-22"
+    delay_sec: 0
+  - person: tom
+    type: slack_msg
+    message: "@ivan unblocked — merged the fix, TASK-22 done"
+    delay_sec: 10
+  - person: maria
+    type: slack_msg
+    message: "@tom nice work, that was blocking us for 3 days 🙌"
+    delay_sec: 20
+  - person: ivan
+    type: slack_msg
+    message: "thanks tom, finally"
+    delay_sec: 30
