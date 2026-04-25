@@ -7,16 +7,27 @@ router = APIRouter()
 @router.get("/insights/{person_id}")
 async def get_insights(person_id: str):
     from app.db import get_connection
-    from app.rag.context import build_person_context
     from app.llm.client import ask
-    from app.llm.prompts import INSIGHT_SYSTEM, insight_user_prompt
     from app.llm.cache import make_prompt_hash
     from datetime import datetime
 
     conn = get_connection()
-    ctx = build_person_context(person_id, conn)
+
+    try:
+        from app.rag.context_v2 import build_person_context_v2
+        ctx = build_person_context_v2(person_id, conn)
+    except ImportError:
+        from app.rag.context import build_person_context
+        ctx = build_person_context(person_id, conn)
+
     if not ctx:
         raise PersonNotFound(person_id)
+
+    try:
+        from app.llm.prompts_v2 import INSIGHT_SYSTEM_V2 as INSIGHT_SYSTEM, \
+                                       insight_user_prompt_v2 as insight_user_prompt
+    except ImportError:
+        from app.llm.prompts import INSIGHT_SYSTEM, insight_user_prompt
 
     user = insight_user_prompt(ctx)
     prompt_hash = make_prompt_hash(INSIGHT_SYSTEM, user, "opus")
