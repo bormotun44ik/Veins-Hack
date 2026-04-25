@@ -4,6 +4,7 @@ import type {
   PersonResponse,
   InsightResponse,
   RecognitionResponse,
+  DashboardResponse,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
@@ -42,6 +43,13 @@ export async function fetchInsights(
   const res = await fetch(`${API_BASE}/insights/${id}`, { signal })
   if (!res.ok) throw new Error(`fetchInsights failed: ${res.status}`)
   return res.json() as Promise<InsightResponse>
+}
+
+export async function fetchDashboard(signal?: AbortSignal): Promise<DashboardResponse> {
+  const url = IS_MOCK ? '/samples/sample_dashboard.json' : `${API_BASE}/dashboard`
+  const res = await fetch(url, { signal })
+  if (!res.ok) throw new Error(`dashboard ${res.status}`)
+  return res.json() as Promise<DashboardResponse>
 }
 
 export async function postRecognition(id: string): Promise<RecognitionResponse> {

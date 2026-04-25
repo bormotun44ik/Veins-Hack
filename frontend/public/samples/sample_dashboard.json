@@ -1,0 +1,93 @@
+{
+  "summary": {
+    "red_count": 1,
+    "yellow_count": 0,
+    "green_count": 4,
+    "avg_overload": 0.39,
+    "peak": { "person_id": "ivan", "overload_score": 0.78 }
+  },
+  "attention": [
+    {
+      "person_id": "ivan",
+      "name": "Ivan Petrov",
+      "role": "Senior Backend Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=ivan",
+      "status": "red",
+      "overload_score": 0.78,
+      "top_insight": "100% night commits + 100% fix/revert ratio + full co-author isolation = solo-firefighting production at night.",
+      "top_action": "Schedule 1:1 this week, pair second engineer onto veins-core to break isolation.",
+      "primary_reason": "isolated night-firefighter"
+    }
+  ],
+  "shoutouts": [
+    {
+      "person_id": "peter",
+      "name": "Peter Dimitrov",
+      "role": "QA Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=peter",
+      "overload_score": 0.20
+    },
+    {
+      "person_id": "anna",
+      "name": "Anna Kowalska",
+      "role": "Frontend Engineer",
+      "avatar_url": "https://i.pravatar.cc/150?u=anna",
+      "overload_score": 0.26
+    },
+    {
+      "person_id": "maria",
+      "name": "Maria Ivanova",
+      "role": "Tech Lead",
+      "avatar_url": "https://i.pravatar.cc/150?u=maria",
+      "overload_score": 0.34
+    }
+  ],
+  "heatmap": {
+    "ivan": {
+      "night_commits_ratio": 1.0,
+      "fix_revert_ratio": 1.0,
+      "commit_tone_delta": 0.5,
+      "pr_review_lag_hours": 0.75,
+      "bus_factor": 0.67,
+      "co_author_isolation": 1.0,
+      "weekend_activity": 0.40
+    },
+    "maria": {
+      "night_commits_ratio": 0.0,
+      "fix_revert_ratio": 0.0,
+      "commit_tone_delta": 0.5,
+      "pr_review_lag_hours": 0.30,
+      "bus_factor": 0.0,
+      "co_author_isolation": 0.6,
+      "weekend_activity": 0.0
+    },
+    "tom": {
+      "night_commits_ratio": 0.0,
+      "fix_revert_ratio": 0.0,
+      "commit_tone_delta": 0.5,
+      "pr_review_lag_hours": 0.20,
+      "bus_factor": 0.0,
+      "co_author_isolation": 0.4,
+      "weekend_activity": 0.0
+    },
+    "anna": {
+      "night_commits_ratio": 0.0,
+      "fix_revert_ratio": 0.0,
+      "commit_tone_delta": 0.0,
+      "pr_review_lag_hours": 0.10,
+      "bus_factor": 0.0,
+      "co_author_isolation": 0.4,
+      "weekend_activity": 0.0
+    },
+    "peter": {
+      "night_commits_ratio": 0.0,
+      "fix_revert_ratio": 0.0,
+      "commit_tone_delta": 0.0,
+      "pr_review_lag_hours": 0.10,
+      "bus_factor": 0.0,
+      "co_author_isolation": 0.6,
+      "weekend_activity": 0.0
+    }
+  },
+  "generated_at": "2026-04-25T08:00:00Z"
+}
