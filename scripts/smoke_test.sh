@@ -61,10 +61,15 @@ jqcheck "/graph?layer=stress — 5 nodes" "$BASE/graph?layer=stress" "len(d['nod
 jqcheck "/graph?layer=collab — >=4 links" "$BASE/graph?layer=collab" "1 if len(d['links'])>=4 else 0" "1"
 jqcheck "/graph?layer=workload — >=15 nodes" "$BASE/graph?layer=workload" "1 if len(d['nodes'])>=15 else 0" "1"
 
-jqcheck "/person/ivan.status"           "$BASE/person/ivan" "d['status']" "yellow"
+jqcheck "/person/ivan.status (RED)"     "$BASE/person/ivan" "d['status']" "red"
 jqcheck "/person/ivan has signals"      "$BASE/person/ivan" "1 if d['signals']['night_commits_ratio']>0 else 0" "1"
 jqcheck "/person/notexist → PERSON_NOT_FOUND" "$BASE/person/does-not-exist" "d['error']['code']" "PERSON_NOT_FOUND"
 jqcheck "/graph?layer=bad → BAD_LAYER"  "$BASE/graph?layer=bad" "d['error']['code']" "BAD_LAYER"
+
+# Phase 2 endpoints
+jqcheck "/dashboard summary structure" "$BASE/dashboard" "1 if 'red_count' in d.get('summary',{}) else 0" "1"
+jqcheck "/dashboard attention has Ivan" "$BASE/dashboard" "d['attention'][0]['person_id'] if d.get('attention') else ''" "ivan"
+jqcheck "/dashboard primary_reason set" "$BASE/dashboard" "1 if d['attention'] and d['attention'][0]['primary_reason'] else 0" "1"
 
 echo ""
 echo "[Frontend]"
