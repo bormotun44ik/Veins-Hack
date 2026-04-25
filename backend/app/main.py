@@ -45,3 +45,10 @@ try:
     app.include_router(llm_router)
 except ImportError:
     pass
+
+# Dashboard router (phase 2 — Agent H)
+try:
+    from app.dashboard.api import router as dashboard_router
+    app.include_router(dashboard_router)
+except ImportError:
+    pass
