@@ -1,0 +1,48 @@
+{
+  "meeting_id": "M-2026-04-22-standup",
+  "title": "Daily Standup — Week 14 (current)",
+  "datetime": "2026-04-22T09:00:00Z",
+  "duration_minutes": 15,
+  "total_words": 1102,
+  "participants": [
+    {"person_id": "marina", "words_spoken": 312, "talk_ratio": 0.283, "sentiment_avg": 0.1},
+    {"person_id": "maria", "words_spoken": 298, "talk_ratio": 0.270, "sentiment_avg": 0.5},
+    {"person_id": "tom", "words_spoken": 210, "talk_ratio": 0.190, "sentiment_avg": 0.2},
+    {"person_id": "anna", "words_spoken": 180, "talk_ratio": 0.163, "sentiment_avg": 0.4},
+    {"person_id": "peter", "words_spoken": 68, "talk_ratio": 0.062, "sentiment_avg": 0.3},
+    {"person_id": "ivan", "words_spoken": 34, "talk_ratio": 0.031, "sentiment_avg": -0.5}
+  ],
+  "utterances": [
+    {"speaker": "marina", "t": "00:00:05", "text": "Alright, let's do standup. Ivan, you want to start? You worked late yesterday."},
+    {"speaker": "ivan", "t": "00:00:12", "text": "Auth is fixed. Hotfix deployed at 3am."},
+    {"speaker": "marina", "t": "00:00:18", "text": "Thanks Ivan. Are you okay? That's the third night this week."},
+    {"speaker": "ivan", "t": "00:00:23", "text": "Fine."},
+    {"speaker": "marina", "t": "00:00:26", "text": "Okay. Maria, how about you?"},
+    {"speaker": "maria", "t": "00:00:29", "text": "Yesterday I finished the user pagination feature. Also reviewed Ivan's PR-51 and left comments — the auth flow needs a cleaner separation of concerns. I can pair with Ivan this afternoon if that works."},
+    {"speaker": "marina", "t": "00:00:52", "text": "That would be great, Maria. Ivan, does 3pm work?"},
+    {"speaker": "ivan", "t": "00:00:57", "text": "Sure."},
+    {"speaker": "marina", "t": "00:01:00", "text": "Tom?"},
+    {"speaker": "tom", "t": "00:01:02", "text": "Working on rate limiting. PR-42 is ready but it's been waiting for review for 4 days now. It's blocking TASK-22 and TASK-23. Sprint ends Friday."},
+    {"speaker": "marina", "t": "00:01:18", "text": "Ivan, can you look at PR-42 today? Or Maria, can you cover the review?"},
+    {"speaker": "maria", "t": "00:01:24", "text": "I can do the auth-adjacent part of the review. I'll take it."},
+    {"speaker": "tom", "t": "00:01:29", "text": "That works, thanks Maria. Also ran into some flaky auth tests in CI — Peter, can you help investigate?"},
+    {"speaker": "peter", "t": "00:01:38", "text": "Already on it, saw the failures yesterday. Will have a report by EOD."},
+    {"speaker": "marina", "t": "00:01:45", "text": "Great. Anna?"},
+    {"speaker": "anna", "t": "00:01:47", "text": "Dashboard performance improvements PR is up — PR-48. Maria please review when you have time. Also started working with Nikita on the LayerToggle component."},
+    {"speaker": "marina", "t": "00:01:59", "text": "How's Nikita doing?"},
+    {"speaker": "anna", "t": "00:02:02", "text": "Really well, asking great questions. He's getting the hang of React patterns."},
+    {"speaker": "marina", "t": "00:02:08", "text": "Excellent. Peter, quick update?"},
+    {"speaker": "peter", "t": "00:02:11", "text": "Added regression tests for the auth race condition. Test suite is stable now. 148 passing."},
+    {"speaker": "marina", "t": "00:02:20", "text": "Good. Blockers? Anyone stuck?"},
+    {"speaker": "tom", "t": "00:02:23", "text": "Just the PR review. But Maria's taking it, so unblocked."},
+    {"speaker": "marina", "t": "00:02:28", "text": "Ivan, any blockers? Do you need anything from me?"},
+    {"speaker": "ivan", "t": "00:02:33", "text": "No."},
+    {"speaker": "marina", "t": "00:02:35", "text": "Okay. Ivan, let's do 1:1 at 11 today — I'll send a calendar invite. Everyone else — good standup, let's have a clean sprint closure. Maria, Tom — thank you for jumping on the review. See you tomorrow."}
+  ],
+  "metadata": {
+    "recorder": "veins-bot",
+    "transcription_model": "whisper-1",
+    "language": "en",
+    "notes": "Ivan spoke only 34 words — significantly below his historical average of 200+. Minimal participation, monosyllabic responses. Marina had to prompt him twice."
+  }
+}
