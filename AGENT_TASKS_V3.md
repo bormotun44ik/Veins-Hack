@@ -685,23 +685,69 @@ worktree: ../veins-agent-m
    10-15 событий за 5 минут — обычный день, mix всех людей.
 
 ЗАВИСИМОСТЬ:
-  • Для YAML — нужен PyYAML. Добавь в backend/requirements.txt:
+  • Для YAML — нужен PyYAML локально (не в backend/requirements.txt!).
+    Создай scripts/requirements.txt:
       pyyaml==6.0.2
-    (или используй stdlib alternative — но YAML удобнее для сценариев)
+    Установка: pip install -r scripts/requirements.txt
+    Backend контейнер trickle.py не запускает — этот файл только для хостовой машины.
   • Backend должен быть запущен на BASE (по умолчанию http://127.0.0.1:8000).
 
 ОГРАНИЧЕНИЯ:
   • Не трогай backend/, frontend/.
   • Не пиши свой ingest endpoint — используй существующий POST /ingest/event.
   • Не вызывай LLM напрямую.
-  • Сценарии — pure YAML, никакой динамической логики (только сquence событий + delays).
+  • Сценарии — pure YAML, никакой динамической логики (только sequence событий + delays).
+
+ROBUSTNESS ПРАВКИ (обязательно, trickle — единственный CLI на сцене):
+
+1. Graceful Ctrl+C в run_random():
+   ```python
+   def run_random(rate, duration, dry_run=False):
+       deadline = time.time() + duration
+       count = 0
+       try:
+           while time.time() < deadline:
+               ev = random_event()
+               if ev:
+                   push_event(*ev, dry_run=dry_run)
+                   count += 1
+               time.sleep(rate)
+       except KeyboardInterrupt:
+           pass
+       print(f"\n✅ Done. Pushed {count} events over {duration}s.", flush=True)
+   ```
+
+2. --scenario и --burst взаимоисключающие:
+   ```python
+   if args.scenario and args.burst:
+       print("❌ --scenario и --burst нельзя комбинировать", flush=True)
+       return 1
+   ```
+
+3. --scenario strip расширения (защита от дурака):
+   ```python
+   name = args.scenario.removesuffix(".yaml").removesuffix(".yml")
+   path = SCENARIOS_DIR / f"{name}.yaml"
+   ```
+   Без этого --scenario ivan-burns-out.yaml → ivan-burns-out.yaml.yaml → файл не найден.
+
+4. flush=True на ВСЕХ print() в trickle.py:
+   Или в начале main():
+   ```python
+   sys.stdout.reconfigure(line_buffering=True)
+   ```
+   Без этого python trickle.py | tee log.txt буферизирует output — на сцене будет казаться
+   что скрипт завис.
 
 DoD:
   1. python scripts/trickle.py --dry-run --burst 3 → 3 события напечатаны без push
   2. python scripts/trickle.py --rate 10 --duration 30 → 3 события реально запушены
   3. python scripts/trickle.py --scenario ivan-burns-out → 6 событий за ~40 сек
-  4. После запуска scenario: ivan overload вырос (+0.05 минимум)
-  5. Все 5 YAML сценариев валидируются: yaml.safe_load() не падает
+  4. python scripts/trickle.py --scenario ivan-burns-out.yaml → то же самое (strip суффикса)
+  5. python scripts/trickle.py --scenario ivan-burns-out --burst 3 → ❌ ошибка (взаимоисключение)
+  6. После запуска scenario: ivan overload вырос (+0.05 минимум)
+  7. Все 5 YAML сценариев валидируются: yaml.safe_load() не падает
+  8. random-day.yaml — последний event с delay_sec >= 240 (5 минут, не 30 сек)
 
 ОТЧЁТ.
 ```
