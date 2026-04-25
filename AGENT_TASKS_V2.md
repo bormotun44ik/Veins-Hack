@@ -551,23 +551,33 @@ worktree: ../veins-agent-j
      транзакции через один cur. SQLite сам сериализует writes.
 
 2. ingest/api.py:
-   from fastapi import APIRouter, Body
+   from fastapi import APIRouter
    from pydantic import BaseModel
+   from typing import Literal
    from app.errors import PersonNotFound, BadEvent
 
    class IngestEventBody(BaseModel):
      person_id: str
-     type: str
+     # Literal → Pydantic сам вернёт 422 с понятным сообщением если type неверный.
+     # BadEvent для type-mismatch не нужен — Pydantic перехватывает до кода.
+     type: Literal["commit","slack_msg","meeting_attended","task_update","review","pr"]
      timestamp: str | None = None
      payload: dict
 
-   VALID_TYPES = {"commit","slack_msg","meeting_attended","task_update","review","pr"}
+   class IngestEventResponse(BaseModel):
+     person_id: str
+     event_id: int
+     old_overload_score: float
+     new_overload_score: float
+     old_status: str
+     new_status: str
+     recomputed_signals: list[str]
 
    router = APIRouter()
 
    # async def — единообразие с другими endpoints в проекте (FastAPI рекомендация).
    # recompute_cheap внутри pure sync (sqlite + signals.compute), это OK.
-   @router.post("/ingest/event")
+   @router.post("/ingest/event", response_model=IngestEventResponse)
    async def ingest_event(body: IngestEventBody):
      from app.db import get_connection
      from app.ingest.recompute import recompute_cheap
@@ -575,25 +585,36 @@ worktree: ../veins-agent-j
      import json
 
      conn = get_connection()
+
+     # Validate person exists
      row = conn.execute("SELECT id FROM people WHERE id=?", (body.person_id,)).fetchone()
      if not row:
        raise PersonNotFound(body.person_id)
 
-     if body.type not in VALID_TYPES:
-       raise BadEvent(f"Invalid type: {body.type}")
+     # Validate timestamp format BEFORE any DB writes
+     if body.timestamp:
+       try:
+         datetime.fromisoformat(body.timestamp)  # raises ValueError if not ISO8601
+       except ValueError:
+         raise BadEvent(f"Invalid timestamp format: '{body.timestamp}' (expected ISO8601)")
 
-     # Защита: ограничь размер payload (50KB разумно).
-     # SQLite примет любой размер, но огромный JSON не имеет смысла.
+     # Validate payload size BEFORE INSERT
      payload_str = json.dumps(body.payload)
      if len(payload_str) > 50_000:
        raise BadEvent(f"Payload too large: {len(payload_str)} bytes (max 50000)")
 
      ts = body.timestamp or datetime.now(timezone.utc).isoformat()
+
      cur = conn.execute(
        "INSERT INTO events (person_id, type, timestamp, payload_json) VALUES (?,?,?,?)",
        (body.person_id, body.type, ts, payload_str)
      )
      event_id = cur.lastrowid
+     # Commit BEFORE recompute — recompute_cheap reads events table.
+     # Новый event должен быть уже в DB чтобы сигналы (fix_revert, night_commits, etc.)
+     # посчитали его. SQLite в default journal mode (DELETE) сериализует concurrent
+     # writes через file lock — race condition при INSERT+UPDATE невозможен на хакатон-load.
+     # Не оптимизируй (single transaction) — это out-of-scope для Agent J.
      conn.commit()
 
      result = recompute_cheap(body.person_id, conn)
@@ -612,7 +633,10 @@ worktree: ../veins-agent-j
      if score > 0.4: return "yellow"
      return "green"
 
-3. backend/app/errors.py — добавить класс BadEvent (если его нет):
+3. backend/app/errors.py — СНАЧАЛА прочитай файл:
+   cat backend/app/errors.py
+   Если BadEvent уже есть — НЕ дублируй, просто импортируй.
+   Если нет — добавь:
    class BadEvent(VeinsError):
      code = "BAD_EVENT"
      http_status = 400
