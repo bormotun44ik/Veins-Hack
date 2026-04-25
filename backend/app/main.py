@@ -30,6 +30,11 @@ async def startup():
         update_all_people(conn)
     except ImportError:
         pass
+    try:
+        from app.llm.smart_cache import init_smart_cache
+        init_smart_cache(conn)
+    except Exception:
+        pass
 
 @app.get("/health")
 def health():

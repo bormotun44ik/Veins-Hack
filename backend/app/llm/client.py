@@ -1,4 +1,4 @@
-import os, logging
+import json, os, logging
 from typing import Literal
 import anthropic
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ async def ask(
     cache_key: str | None = None,
     max_tokens: int = 2048,
     temperature: float = 0.3,
+    fallback_ctx: dict | None = None,
 ) -> str:
     from app.db import get_connection
     conn = get_connection()
@@ -50,6 +51,21 @@ async def ask(
             from app.llm.cache import set_cached
             set_cached(prompt_hash, model, result, conn)
         return result
+    except anthropic.APIStatusError as e:
+        # 5xx — Anthropic overloaded / temporary issue
+        if 500 <= e.status_code < 600:
+            logger.warning(f"LLM 5xx ({e.status_code}), falling back to template")
+            if fallback_ctx is not None:
+                try:
+                    from app.llm.fallback import generate_fallback_insight
+                    fb = generate_fallback_insight(fallback_ctx)
+                    return json.dumps(fb)
+                except Exception as fe:
+                    logger.error(f"fallback also failed: {fe}")
+        # 4xx or no fallback_ctx — raise as before
+        logger.error(f"LLM ask error: {e}")
+        from app.errors import LLMUnavailable
+        raise LLMUnavailable(f"LLM call failed: {e}")
     except Exception as e:
         logger.error(f"LLM ask error: {e}")
         from app.errors import LLMUnavailable
