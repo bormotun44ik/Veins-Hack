@@ -7,7 +7,24 @@ import type {
   DashboardResponse,
 } from './types'
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+// Resolve API base:
+//   1. VITE_API_BASE env override
+//   2. localhost dev — direct :8000
+//   3. Anything else (LAN, cloudflare tunnel) — same-origin /api proxy via Vite
+//      (Vite proxies /api/* → backend:8000, so frontend и backend на одном origin)
+function resolveApiBase(): string {
+  const envBase = import.meta.env.VITE_API_BASE
+  if (envBase && envBase !== 'http://localhost:8000') return envBase
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:8000'
+    }
+    return '/api'
+  }
+  return 'http://localhost:8000'
+}
+
+const API_BASE = resolveApiBase()
 const IS_MOCK = import.meta.env.VITE_MOCK === 'true'
 
 export async function fetchGraph(layer: Layer): Promise<GraphResponse> {

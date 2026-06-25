@@ -18,7 +18,7 @@ YELLOW="\033[33m"
 BOLD="\033[1m"
 RESET="\033[0m"
 
-POLL_WAIT=12  # >= dashboard polling interval (10s) + buffer
+POLL_WAIT=12  # >= dashboard polling interval (10s) + buffer для надёжности
 
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo -e "${BOLD}  Veins Demo Replay — Live Event Injection  ${RESET}"

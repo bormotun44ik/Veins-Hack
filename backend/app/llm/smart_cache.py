@@ -58,7 +58,7 @@ def _bucketize(v: float, threshold: float) -> int:
     return zone * 100 + int(local)
 
 
-def signals_hash(signals: dict, threshold: float = 0.10) -> str:
+def signals_hash(signals: dict, threshold: float = 0.20) -> str:
     """Hash of bucketized signals — changes < threshold don't change hash.
 
     BUT: crossing status boundary (0.4 or 0.7) ALWAYS changes hash,

@@ -15,8 +15,12 @@ logging.getLogger("app").setLevel(logging.INFO)
 
 app = FastAPI(title="Veins", version="0.1.0")
 
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://localhost:5174"],
-                   allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r".*",  # demo mode — открыть для всех (LAN demo)
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(Exception)
 async def veins_error_handler(request: Request, exc: Exception):

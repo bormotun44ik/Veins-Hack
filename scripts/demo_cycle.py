@@ -286,7 +286,7 @@ def health_check() -> bool:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Endless burnout/recovery demo cycle")
-    p.add_argument("--rate", type=int, default=8, help="seconds between events (default 8)")
+    p.add_argument("--rate", type=int, default=4, help="seconds between events (default 8)")
     p.add_argument("--duration", type=int, default=0, help="stop after N seconds (0 = infinite)")
     p.add_argument("--reset", action="store_true", help="just print current Ivan state and exit")
     p.add_argument("--quiet", action="store_true", help="less verbose")
